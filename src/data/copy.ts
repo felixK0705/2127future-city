@@ -3,6 +3,7 @@ export const UI_COPY = {
     title: '2127 未来都市デザイナー',
     lead: '未来は、選択の積み重ねでできている。',
     start: '未来都市を設計する',
+    nickname: 'ニックネーム',
   },
   policies: {
     progress: '五つの選択',
@@ -16,6 +17,10 @@ export const UI_COPY = {
   },
   reveal: {
     lead: 'あなたの選択が、この種類の未来をつくりました。',
+    owner: (nickname: string) => {
+      const name = nickname.trim()
+      return name ? `${name} さんの未来都市` : 'あなたの未来都市'
+    },
     gained: '得たもの',
     released: '手放したもの',
   },
@@ -51,6 +56,26 @@ export const UI_COPY = {
     radar: '五つの都市指標',
     diorama: 'あなたが設計した2127年の都市景観',
   },
+} as const
+
+/** ダウンロード画像だけが使う文言。report.ts に直書きすると文字化けしやすい。 */
+export const REPORT_COPY = {
+  plate: '2127年発行　未来都市来訪記念',
+  unnamedCity: '名もなき未来都市',
+  visit: '来訪日',
+  citizen: '市民番号',
+  metrics: 'この都市の五つの指標',
+  policies: '選んだ五つの政策',
+  unselected: '未選択',
+  tradeoff: (strong: string, weak: string) =>
+    `${strong}を伸ばす代わりに、${weak}をどう守るかが問われる都市です。`,
+  filename: (cityName: string) => `${cityName || '2127未来都市'}-来訪記念.png`,
+  missingSnapshot: 'ジオラマ画像が見つかりません。',
+  badSnapshot: 'ジオラマ画像を読み込めませんでした。',
+  noContext: '記念品画像を作成できませんでした。',
+  writeFailed: '記念品画像の書き出しに失敗しました。',
+  createFailed: '記念品画像の作成に失敗しました。もう一度お試しください。',
+  downloadFailed: '記念品をダウンロードできませんでした。もう一度お試しください。',
 } as const
 
 export const METRIC_LABELS = {

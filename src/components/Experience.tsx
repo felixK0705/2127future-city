@@ -6,7 +6,9 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react'
+import gsap from 'gsap'
 import {
+  accentForArchetype,
   archetypeToDiorama,
   createCanvasDiorama,
   getArchetype,
@@ -14,7 +16,7 @@ import {
   type Archetype,
 } from '../core-city'
 import { POLICY_CATEGORIES, findPolicy } from '../data/policies'
-import { CATEGORY_ICONS, METRIC_LABELS } from '../data/copy'
+import { CATEGORY_ICONS, METRIC_LABELS, UI_COPY } from '../data/copy'
 import { useEnter } from '../hooks/useEnter'
 import { calculateScores, getTradeoffs } from '../lib/scoring'
 import { buildStaticWhy } from '../lib/explanation'
@@ -225,8 +227,17 @@ function MetricRows({ scores }: { scores: Scores }) {
   )
 }
 
-export function Intro({ onStart }: { onStart: () => void }) {
+export function Intro({
+  nickname,
+  setNickname,
+  onStart,
+}: {
+  nickname: string
+  setNickname: (name: string) => void
+  onStart: () => void
+}) {
   const ref = useEnter<HTMLElement>('intro')
+  const canStart = nickname.trim().length > 0
   return (
     <main className="screen intro" id="main-content" ref={ref}>
       <header className="topbar">
@@ -236,7 +247,25 @@ export function Intro({ onStart }: { onStart: () => void }) {
         <p className="eyebrow eyebrow--latin" data-enter>Future City Designer</p>
         <h1 id="intro-title" data-enter>未来は、選択の<br />積み重ねでできている。</h1>
         <p className="lede" data-enter>5つの政策を選び、あなたの未来都市を設計します。</p>
-        <button className="button button--primary button--large" onClick={onStart} data-enter>
+        <div className="intro__field" data-enter>
+          <label className="sr-only" htmlFor="nickname">{UI_COPY.intro.nickname}</label>
+          <input
+            id="nickname"
+            name="nickname"
+            type="text"
+            autoComplete="nickname"
+            required
+            aria-required="true"
+            placeholder={UI_COPY.intro.nickname}
+            maxLength={16}
+            value={nickname}
+            onChange={(event) => setNickname(event.target.value.slice(0, 16))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && canStart) onStart()
+            }}
+          />
+        </div>
+        <button className="button button--primary button--large" disabled={!canStart} onClick={onStart} data-enter>
           <span>未来都市を設計する</span>
           <Icon name="arrow_forward" />
         </button>
@@ -346,64 +375,117 @@ export function PolicyFlow({
   )
 }
 
-export function TimeJump({ onArrive }: { onArrive: () => void }) {
+export function TimeJump({
+  onArrive,
+  onDismiss,
+}: {
+  onArrive: () => void
+  onDismiss?: () => void
+}) {
   const [year, setYear] = useState(2027)
+  const [progress, setProgress] = useState(0)
+  const [covering, setCovering] = useState(false)
+  const screenRef = useRef<HTMLDivElement>(null)
+  const veilRef = useRef<HTMLDivElement>(null)
+  const orbRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let frame = 0
+    let hold = 0
+    let leave: gsap.core.Timeline | undefined
+
+    const finish = () => {
+      if (reduced) {
+        onArrive()
+        onDismiss?.()
+        return
+      }
+      // 先用幕布蓋住，再在底下掛上揭示頁，最後整層溶解。
+      // 城市不能從光球旁邊「長出來」，也不要和背景縮放、資訊列滑入搶戲。
+      leave = gsap.timeline({ onComplete: () => onDismiss?.() })
+      leave.to(veilRef.current, { opacity: 1, duration: 0.28, ease: 'power2.inOut' })
+      leave.add(() => {
+        setCovering(true)
+        onArrive()
+      })
+      leave.to({}, { duration: 0.14 })
+      leave.to(orbRef.current, { opacity: 0, duration: 0.48, ease: 'power2.out' }, '-=0.02')
+      leave.to(screenRef.current, { opacity: 0, duration: 0.42, ease: 'power2.out' }, '<')
+    }
+
     if (reduced) {
       setYear(2127)
-      const timer = window.setTimeout(onArrive, 250)
-      return () => window.clearTimeout(timer)
+      setProgress(1)
+      hold = window.setTimeout(finish, 220)
+      return () => window.clearTimeout(hold)
     }
+
     const started = performance.now()
-    let frame = 0
     const tick = (now: number) => {
-      const progress = Math.min(1, Math.max(0, (now - started) / 1800))
-      setYear(Math.round(2027 + 100 * progress))
-      if (progress < 1) frame = requestAnimationFrame(tick)
-      else window.setTimeout(onArrive, 450)
+      const raw = Math.min(1, Math.max(0, (now - started) / 2000))
+      const eased = 1 - (1 - raw) ** 3
+      setProgress(eased)
+      setYear(Math.round(2027 + 100 * eased))
+      if (raw < 1) frame = requestAnimationFrame(tick)
+      else hold = window.setTimeout(finish, 160)
     }
     frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
-  }, [onArrive])
+    return () => {
+      cancelAnimationFrame(frame)
+      window.clearTimeout(hold)
+      leave?.kill()
+    }
+  }, [onArrive, onDismiss])
+
+  const yearScale = 0.42 + progress * 0.86
 
   return (
-    <main className="screen time-jump" id="main-content" aria-live="polite">
-      <div className="time-jump__orb">
+    <div
+      className="screen time-jump"
+      id={covering ? undefined : 'main-content'}
+      role={covering ? undefined : 'main'}
+      aria-live="polite"
+      aria-hidden={covering || undefined}
+      ref={screenRef}
+    >
+      <div className="time-jump__veil" ref={veilRef} />
+      <div className="time-jump__orb" ref={orbRef}>
         <p className="eyebrow"><Icon name="flight_takeoff" />100年後へ</p>
-        <strong>{year}</strong>
+        <strong style={{ transform: `scale(${yearScale})` }}>{year}</strong>
       </div>
-    </main>
+    </div>
   )
 }
 
 export function CityReveal({
   cityName,
   title,
+  nickname,
   scores,
   archetypeId,
   onContinue,
 }: {
   cityName: string
   title: string
+  nickname: string
   scores: Scores
   archetypeId: string
   onContinue: () => void
 }) {
-  const ref = useEnter<HTMLElement>('reveal')
   const tradeoffs = getTradeoffs(scores)
   return (
-    <main className="screen reveal-screen" id="main-content" ref={ref}>
+    <main className="screen reveal-screen" id="main-content">
       <div className="reveal__stage">
         <CityVisualization scores={scores} archetypeId={archetypeId} />
       </div>
       <section className="reveal__bar panel">
-        <div data-enter>
-          <p className="eyebrow"><Icon name="location_city" />あなたの未来都市</p>
+        <div>
+          <p className="eyebrow"><Icon name="location_city" />{UI_COPY.reveal.owner(nickname)}</p>
           <h1>{cityName}</h1>
           <p className="lede">{title}</p>
         </div>
-        <dl className="tradeoff-rows" data-enter>
+        <dl className="tradeoff-rows">
           <div>
             <dt>得たもの</dt>
             <dd>{tradeoffs.gained.map((item) => item.label).join('・')}</dd>
@@ -413,7 +495,7 @@ export function CityReveal({
             <dd className="is-cost">{tradeoffs.released.map((item) => item.label).join('・')}</dd>
           </div>
         </dl>
-        <button className="button button--primary" onClick={onContinue} data-enter>
+        <button className="button button--primary" onClick={onContinue}>
           <span>理由を見る</span>
           <Icon name="arrow_forward" />
         </button>
@@ -569,7 +651,8 @@ export function Souvenir({
   }
   const save = async () => {
     try {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760"><defs><linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f3f3f4"/><stop offset="1" stop-color="#e2e2e4"/></linearGradient></defs><rect width="1200" height="760" fill="url(#sky)"/><path d="M0 650Q250 500 500 620T1200 520V760H0Z" fill="#d8d8da"/><circle cx="930" cy="140" r="80" fill="#d93f3f" opacity="0.5"/><g fill="#ffffff">${METRIC_KEYS.map((key, index) => `<rect x="${110 + index * 200}" y="${650 - scores[key] * 4}" width="120" height="${scores[key] * 4}" rx="12"/>`).join('')}</g></svg>`
+      const cityAccent = accentForArchetype(archetypeId).primary
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760"><defs><linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f3f3f4"/><stop offset="1" stop-color="#e2e2e4"/></linearGradient></defs><rect width="1200" height="760" fill="url(#sky)"/><path d="M0 650Q250 500 500 620T1200 520V760H0Z" fill="#d8d8da"/><circle cx="930" cy="140" r="80" fill="${cityAccent}" opacity="0.5"/><g fill="#ffffff">${METRIC_KEYS.map((key, index) => `<rect x="${110 + index * 200}" y="${650 - scores[key] * 4}" width="120" height="${scores[key] * 4}" rx="12"/>`).join('')}</g></svg>`
       const snapshot = dioramaRef.current?.snapshot() ?? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
       await downloadReport({
         cityName,

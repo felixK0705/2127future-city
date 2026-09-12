@@ -10,6 +10,7 @@ import type {
   DioramaConduit,
   DioramaConfig,
   DioramaDrone,
+  DioramaFigure,
   DioramaGuideway,
   DioramaLandmarkKind,
   DioramaLawn,
@@ -138,7 +139,7 @@ function pickMaterial(
   // 自由な街ほど、外壁の色がばらばらになる（パステルなので基調は崩れない）
   const tint = pos(traits.governance) * 0.42 + patina * 0.12;
   if (roll < tint) return rng.chance(0.5) ? 'tintPrimary' : 'tintSecondary';
-  const glass = tint + tuning.glassBias + (height > 0.4 ? 0.14 : 0) + pos(traits.growth) * 0.12;
+  const glass = tint + tuning.glassBias * 0.45 + (height > 0.4 ? 0.14 : 0.03) + pos(traits.growth) * 0.1;
   if (roll < glass) return 'glass';
   // 管理された街は白一色に揃う
   if (order > 0.6) return roll < 0.86 ? 'light' : 'mid';
@@ -191,11 +192,11 @@ function pickCrown(
 
 function pickTree(rng: Rng): { kind: TreeKind; size: number; tone: 0 | 1 } {
   const roll = rng.next();
-  const kind: TreeKind = roll < 0.6 ? 'round' : roll < 0.85 ? 'cloud' : 'cone';
+  const kind: TreeKind = roll < 0.52 ? 'round' : roll < 0.82 ? 'cloud' : 'cone';
   return {
     kind,
-    size: rng.range(0.05, 0.085) * (kind === 'cone' ? 0.86 : 1),
-    tone: rng.chance(0.32) ? 1 : 0,
+    size: rng.range(0.058, 0.1) * (kind === 'cone' ? 0.9 : 1),
+    tone: rng.chance(0.38) ? 1 : 0,
   };
 }
 
@@ -430,10 +431,10 @@ export function buildDioramaLayout(config: DioramaConfig): DioramaLayout {
   const maxDist = Math.hypot(center, center);
 
   // 拡張の街は高く、持続の街は低く抑える
-  const heightCap = clamp(0.52 + traits.growth * 0.26, 0.26, 0.8);
+  const heightCap = clamp(0.46 + traits.growth * 0.36, 0.22, 0.9);
   // 集中の街は中心へ急に高くなり、分散の街は高さが平らに揃う
-  const falloff = traits.power >= 0 ? 1.5 + traits.power * 1.3 : 1.5 + traits.power * 0.9;
-  const flatten = pos(-traits.power) * 0.55;
+  const falloff = traits.power >= 0 ? 1.7 + traits.power * 1.7 : 1.35 + traits.power * 1.15;
+  const flatten = pos(-traits.power) * 0.62;
   // 高さのばらつき（自由ほど大きく、管理ほど小さい）
   const spreadLow = lerp(0.4, 0.88, order);
   const spreadHigh = lerp(1.25, 0.98, order);
@@ -594,9 +595,9 @@ export function buildDioramaLayout(config: DioramaConfig): DioramaLayout {
   /* ---------------- 空中回廊（拡張） ---------------- */
 
   const skybridges: DioramaSkybridge[] = [];
-  if (traits.growth > 0.2) {
+  if (traits.growth > 0) {
     const byLot = new Map(blocks.map((block) => [`${block.col},${block.row}`, block]));
-    const limit = Math.round(2 + traits.growth * 4);
+    const limit = Math.round(2 + traits.growth * 5);
     for (const block of blocks) {
       if (skybridges.length >= limit) break;
       if (block.height < 0.28) continue;
@@ -664,7 +665,7 @@ export function buildDioramaLayout(config: DioramaConfig): DioramaLayout {
 
     // 水辺には水上艇
     if (waterEdge !== 'none') {
-      const boats = traits.openness > 0.2 ? 3 : 2;
+      const boats = 2 + Math.round(pos(traits.openness) * 2 + pos(-traits.growth) * 1.4);
       for (let i = 0; i < boats; i += 1) {
         const along = rng.range(-0.7, 0.7);
         const edge = 1 - cell * 0.5;
@@ -728,7 +729,7 @@ export function buildDioramaLayout(config: DioramaConfig): DioramaLayout {
   /* ---------------- 高架軌道（拡張） ---------------- */
 
   let maglev: DioramaMaglev | null = null;
-  if (traits.growth > 0.3) {
+  if (traits.growth > 0.12) {
     const y = 0.2 + traits.growth * 0.05;
     const segments: DioramaGuideway[] = [];
     for (let row = 0; row < GRID; row += 1) {
@@ -823,6 +824,30 @@ export function buildDioramaLayout(config: DioramaConfig): DioramaLayout {
     }
   }
 
+  const figures: DioramaFigure[] = [];
+  if (withProps) {
+    const crowd = Math.round(lerp(6, 28, pos(traits.openness) * 0.62 + (1 - order) * 0.18 + 0.12));
+    const sidewalk = cell * 0.4;
+    const nsAt = [lotCenter(roadCol, cell) - sidewalk, lotCenter(roadCol, cell) + sidewalk];
+    const ewAt = [lotCenter(roadRow, cell) - sidewalk, lotCenter(roadRow, cell) + sidewalk];
+    for (let i = 0; i < crowd; i += 1) {
+      const alongZ = i % 2 === 0;
+      const side = (i >> 1) % 2;
+      // 同じ歩道は同じ向き。近い車線と揃える（左通行の隣を歩く）
+      const direction: 1 | -1 = alongZ ? (side === 0 ? 1 : -1) : (side === 0 ? -1 : 1);
+      figures.push({
+        id: `fig-${i}`,
+        axis: alongZ ? 'z' : 'x',
+        at: alongZ ? nsAt[side]! : ewAt[side]!,
+        start: rng.range(-0.92, 0.92),
+        direction,
+        speed: rng.range(0.035, 0.055) * (1 + pos(traits.openness) * 0.15),
+        stride: rng.range(18, 26),
+        size: rng.range(0.036, 0.048),
+      });
+    }
+  }
+
   const sparkles: DioramaSparkle[] = [];
   if (withSparkles) {
     const count = rng.int(8, 12);
@@ -849,6 +874,7 @@ export function buildDioramaLayout(config: DioramaConfig): DioramaLayout {
     blocks,
     landmarks,
     trees,
+    figures,
     props,
     clouds,
     sparkles,

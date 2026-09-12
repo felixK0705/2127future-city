@@ -600,122 +600,235 @@ export function drawTree(
 ): void {
   const base = toScreen(camera, tree.x, 0, tree.z);
   const crown = tree.size * camera.span;
-  const trunkHeight = crown * (tree.kind === 'cone' ? 0.5 : 0.95);
+  const trunkHeight = crown * (tree.kind === 'cone' ? 1.05 : 1.48);
   const leaf = tree.tone === 1 ? palette.foliageDeep : palette.foliage;
-  const leafLight = shade(leaf, 0.2);
-  const leafMid = leaf;
-  const leafDark = shade(leaf, -0.18);
-  const bark = mix(palette.foliageDeep, '#7a5a3c', 0.72);
-
-  // 幹（根元をわずかに広げる）
-  fillPoly(
-    ctx,
-    [
-      { x: base.x - crown * 0.13, y: base.y },
-      { x: base.x + crown * 0.13, y: base.y },
-      { x: base.x + crown * 0.07, y: base.y - trunkHeight },
-      { x: base.x - crown * 0.07, y: base.y - trunkHeight },
-    ],
-    bark,
-  );
-  fillPoly(
-    ctx,
-    [
-      { x: base.x - crown * 0.13, y: base.y },
-      { x: base.x - crown * 0.02, y: base.y },
-      { x: base.x - crown * 0.02, y: base.y - trunkHeight },
-      { x: base.x - crown * 0.07, y: base.y - trunkHeight },
-    ],
-    shade(bark, 0.16),
-  );
-
+  const leafLite = mix(leaf, '#ffffff', 0.28);
   const top = base.y - trunkHeight;
+  const rng = createRng(`tree:${tree.x.toFixed(3)}:${tree.z.toFixed(3)}`);
+
+  fillEllipse(ctx, base.x, base.y + crown * 0.02, crown * 0.22, crown * 0.08, palette.shadow, 0.16);
+
+  ctx.save();
+  ctx.globalAlpha = 0.9 * opacityScale;
+  ctx.strokeStyle = mix(palette.bark, leaf, 0.22);
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1, crown * 0.055);
+  ctx.beginPath();
+  ctx.moveTo(base.x, base.y);
+  ctx.lineTo(base.x - crown * 0.02, top + crown * 0.08);
+  ctx.stroke();
+  ctx.lineWidth = Math.max(0.6, crown * 0.03);
+  const forks: readonly (readonly [number, number, number])[] =
+    tree.kind === 'cone'
+      ? [
+          [-0.2, 0.42, 0.55],
+          [0.18, 0.58, 0.7],
+          [-0.1, 0.78, 0.82],
+        ]
+      : tree.kind === 'cloud'
+        ? [
+            [-0.48, 0.28, 0.35],
+            [0.46, 0.34, 0.4],
+            [-0.22, 0.58, 0.62],
+            [0.26, 0.66, 0.7],
+            [0.02, 0.88, 0.9],
+          ]
+        : [
+            [-0.38, 0.36, 0.42],
+            [0.36, 0.44, 0.5],
+            [-0.16, 0.7, 0.74],
+            [0.14, 0.82, 0.86],
+          ];
+  for (const [dx, join, tip] of forks) {
+    ctx.beginPath();
+    ctx.moveTo(base.x - crown * 0.02, top + crown * (1 - join) * 0.2);
+    ctx.lineTo(base.x + dx * crown, top - tip * crown * 0.12);
+    ctx.stroke();
+  }
+  ctx.restore();
 
   if (tree.kind === 'cone') {
-    // 針葉樹: 段を重ねる
-    const tiers = detailed ? 4 : 2;
+    const tiers = detailed ? 5 : 3;
     for (let i = 0; i < tiers; i += 1) {
-      const t = i / tiers;
-      const w = crown * (1.05 - t * 0.62);
-      const yTop = top - crown * (0.55 + t * 1.05);
-      const yBottom = top - crown * (t * 1.05) + crown * 0.12;
-      fillPoly(
-        ctx,
-        [
-          { x: base.x, y: yTop },
-          { x: base.x + w, y: yBottom },
-          { x: base.x - w, y: yBottom },
-        ],
-        i % 2 === 0 ? leafMid : shade(leafMid, 0.06),
-      );
-      fillPoly(
-        ctx,
-        [
-          { x: base.x, y: yTop },
-          { x: base.x, y: yBottom },
-          { x: base.x - w, y: yBottom },
-        ],
-        leafLight,
-        0.45,
-      );
+      const t = i / (tiers - 1);
+      const w = crown * (0.92 - t * 0.62);
+      const y = top - crown * (0.08 + t * 0.95);
+      fillEllipse(ctx, base.x + crown * 0.04, y + crown * 0.04, w * 0.92, w * 0.38, shade(leaf, -0.12), 0.42);
+      fillEllipse(ctx, base.x, y, w, w * 0.36, leaf, 0.62);
+      if (detailed) fillEllipse(ctx, base.x - w * 0.22, y - w * 0.12, w * 0.42, w * 0.16, leafLite, 0.4);
     }
     return;
   }
 
-  const blobs: readonly (readonly [number, number, number])[] =
+  const clusters: readonly (readonly [number, number, number])[] =
     tree.kind === 'cloud'
       ? [
-          [-0.58, 0.12, 0.66],
-          [0.58, 0.18, 0.6],
-          [0.05, -0.44, 0.9],
-          [-0.2, -0.05, 0.72],
+          [-0.38, -0.08, 0.46],
+          [0.4, -0.02, 0.42],
+          [0.02, -0.42, 0.58],
+          [-0.18, 0.22, 0.34],
+          [0.22, 0.18, 0.32],
         ]
       : [
-          [0, -0.42, 0.98],
-          [-0.36, 0.12, 0.7],
-          [0.36, 0.08, 0.66],
-          [0.02, 0.22, 0.6],
+          [0.02, -0.38, 0.62],
+          [-0.32, 0.02, 0.42],
+          [0.3, 0.06, 0.4],
+          [-0.08, 0.28, 0.3],
         ];
-
-  // 陰 → 本体 → 受光 の順に重ねて、葉の塊に厚みを出す
-  for (const [dx, dy, scale] of blobs) {
-    fillCircle(ctx, base.x + dx * crown, top + dy * crown, crown * scale, leafDark);
+  for (const cluster of clusters) {
+    const dx = cluster[0];
+    const dy = cluster[1];
+    const scale = cluster[2];
+    fillEllipse(ctx, base.x + dx * crown + crown * 0.05, top + dy * crown + crown * 0.06, crown * scale * 0.95, crown * scale * 0.62, shade(leaf, -0.1), 0.32);
   }
-  for (const [dx, dy, scale] of blobs) {
-    fillCircle(
-      ctx,
-      base.x + dx * crown - crown * 0.06,
-      top + dy * crown - crown * 0.08,
-      crown * scale * 0.9,
-      leafMid,
-    );
+  for (const cluster of clusters) {
+    const dx = cluster[0];
+    const dy = cluster[1];
+    const scale = cluster[2];
+    fillEllipse(ctx, base.x + dx * crown, top + dy * crown, crown * scale, crown * scale * 0.66, leaf, 0.58);
   }
   if (detailed) {
-    for (const [dx, dy, scale] of blobs.slice(0, 2)) {
+    for (let i = 0; i < Math.min(3, clusters.length); i += 1) {
+      const cluster = clusters[i]!;
+      const dx = cluster[0];
+      const dy = cluster[1];
+      const scale = cluster[2];
+      fillEllipse(
+        ctx,
+        base.x + dx * crown - crown * 0.16,
+        top + dy * crown - crown * 0.14,
+        crown * scale * 0.38,
+        crown * scale * 0.22,
+        leafLite,
+        0.45,
+      );
+    }
+    const dots = 10;
+    for (let i = 0; i < dots; i += 1) {
       fillCircle(
         ctx,
-        base.x + dx * crown - crown * 0.22,
-        top + dy * crown - crown * 0.24,
-        crown * scale * 0.48,
-        leafLight,
-        0.7,
+        base.x + rng.range(-0.42, 0.42) * crown,
+        top + rng.range(-0.5, 0.22) * crown,
+        Math.max(0.5, crown * rng.range(0.028, 0.05)),
+        leafLite,
+        0.35,
       );
     }
   }
+}
+
+function limb(
+  ctx: Ctx,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  width: number,
+  color: string,
+): void {
+  ctx.save();
+  ctx.globalAlpha = 0.94 * opacityScale;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 歩いている人。胴・頭・振る手足を持つ小さな立体。 */
+export function drawFigure(
+  ctx: Ctx,
+  camera: IsoCamera,
+  x: number,
+  z: number,
+  palette: DioramaPalette,
+  motion: { walk: number; alongX: boolean; direction: 1 | -1; size: number },
+): void {
+  const foot = toScreen(camera, x, 0, z);
+  const ahead = toScreen(
+    camera,
+    x + (motion.alongX ? motion.direction * 0.08 : 0),
+    0,
+    z + (motion.alongX ? 0 : motion.direction * 0.08),
+  );
+  const faceLen = Math.hypot(ahead.x - foot.x, ahead.y - foot.y) || 1;
+  const nx = (ahead.x - foot.x) / faceLen;
+  const ny = (ahead.y - foot.y) / faceLen;
+  const h = camera.span * motion.size;
+  const swing = Math.sin(motion.walk * Math.PI * 2);
+  const lean = h * 0.07;
+  const cx = foot.x + nx * lean;
+  const hipY = foot.y - h * 0.4;
+  const shoulderY = foot.y - h * 0.7;
+  const headY = foot.y - h * 0.9;
+  const stride = h * 0.22;
+  const body = palette.accentPrimary;
+  const cloth = mix(body, '#ffffff', 0.18);
+  const skin = mix(body, '#ffffff', 0.42);
+
+  fillEllipse(ctx, foot.x, foot.y + h * 0.02, h * 0.2, h * 0.08, palette.shadow, 0.22);
+
+  const backLeg = -swing;
+  limb(
+    ctx,
+    cx,
+    hipY,
+    cx + nx * backLeg * stride,
+    foot.y - Math.abs(backLeg) * h * 0.05 + ny * backLeg * stride * 0.18,
+    Math.max(1.6, h * 0.09),
+    shade(body, -0.12),
+  );
+  limb(
+    ctx,
+    cx,
+    shoulderY,
+    cx + nx * swing * h * 0.16,
+    shoulderY + h * 0.2 + ny * swing * h * 0.08,
+    Math.max(1.3, h * 0.07),
+    shade(cloth, -0.08),
+  );
+
+  fillEllipse(ctx, cx, (hipY + shoulderY) * 0.5, h * 0.11, h * 0.2, cloth, 0.96);
+  fillEllipse(ctx, cx - nx * h * 0.03, (hipY + shoulderY) * 0.5 - h * 0.04, h * 0.07, h * 0.14, mix(cloth, '#ffffff', 0.28), 0.55);
+
+  limb(
+    ctx,
+    cx,
+    hipY,
+    cx + nx * swing * stride,
+    foot.y - Math.abs(swing) * h * 0.06 + ny * swing * stride * 0.18,
+    Math.max(1.7, h * 0.1),
+    body,
+  );
+  limb(
+    ctx,
+    cx,
+    shoulderY,
+    cx - nx * swing * h * 0.17,
+    shoulderY + h * 0.22 - ny * swing * h * 0.08,
+    Math.max(1.3, h * 0.07),
+    cloth,
+  );
+
+  fillCircle(ctx, cx + nx * lean * 0.45, headY + ny * lean * 0.2, h * 0.13, skin, 0.98);
+  fillCircle(ctx, cx + nx * lean * 0.45 - h * 0.04, headY + ny * lean * 0.2 - h * 0.04, h * 0.05, '#ffffff', 0.45);
 }
 
 /* ------------------------------------------------------------------ *
  * 小物（車・ベンチ・街灯・小舟）
  * ------------------------------------------------------------------ */
 
-/** 浮上の光・発光体の色。ガラスの色相を残しつつ、明るい青緑へ寄せる */
+/** 浮上の光・発光体の色。都市のアクセントをそのまま光らせる */
 export function glowColor(palette: DioramaPalette): string {
-  return mix(palette.buildingGlass, '#6ff0ff', 0.55);
+  return palette.glow;
 }
 
 /**
- * 2127 年の車（浮上するポッド）。タイヤは無く、路面から少し浮いて、
- * 足元に青い浮上光を落とす。バスは窓帯の長いシャトルになる。
+ * 2127 年の自律走行ポッド。タイヤは無く、路面から少し浮いて、
+ * 足元に浮上光を落とす。バスは窓帯の長いシャトルになる。
  */
 export function drawVehicle(
   ctx: Ctx,
@@ -734,38 +847,38 @@ export function drawVehicle(
 ): void {
   const { palette } = spec;
   const direction = spec.direction ?? 1;
-  const length = spec.long ? 0.13 : 0.078;
-  const width = spec.long ? 0.05 : 0.044;
+  const length = spec.long ? 0.14 : 0.082;
+  const width = spec.long ? 0.048 : 0.042;
   const w = spec.alongX ? length : width;
   const d = spec.alongX ? width : length;
-  const hover = 0.014;
-  const bodyH = spec.long ? 0.044 : 0.017;
+  const hover = 0.016;
+  const bodyH = spec.long ? 0.038 : 0.02;
   const glow = glowColor(palette);
-  const glass = mix(palette.buildingGlass, '#1d2a3a', 0.45);
-  const glassFront = mix(palette.buildingGlass, '#ffffff', 0.45);
+  const glass = palette.glassDeep;
+  const glassFront = mix(palette.buildingGlass, '#ffffff', 0.38);
 
-  // 面の index は回転しても変わらない（0 = -z / 1 = +x / 2 = +z / 3 = -x）
   const frontIndex = spec.alongX ? (direction > 0 ? 1 : 3) : direction > 0 ? 2 : 0;
   const backIndex = (frontIndex + 2) % 4;
   const isEnd = (index: number): boolean => index % 2 === frontIndex % 2;
 
-  // 浮上の光（路面に落ちる青い光）と、淡い影
-  drawContactShadow(ctx, camera, spec.x, spec.z, length * 0.5, palette.shadow, 0.2);
-  drawContactShadow(ctx, camera, spec.x, spec.z, length * 0.62, glow, 0.6);
+  drawContactShadow(ctx, camera, spec.x, spec.z, length * 0.52, palette.shadow, 0.22);
+  drawContactShadow(ctx, camera, spec.x, spec.z, length * 0.7, glow, 0.55);
 
-  // 浮上ユニット（車体の下の細い台）
-  drawBox(ctx, camera, {
-    x: spec.x,
-    z: spec.z,
-    y: hover * 0.3,
-    width: w * 0.72,
-    depth: d * 0.72,
-    height: hover * 0.55,
-    color: shade(palette.buildingMid, -0.42),
-    topColor: glow,
-  });
+  // 浮上ユニット（前後 2 基）
+  const unitShift = length * 0.28 * direction;
+  for (const sign of [-1, 1] as const) {
+    drawBox(ctx, camera, {
+      x: spec.x + (spec.alongX ? unitShift * sign * 0.35 : 0),
+      z: spec.z + (spec.alongX ? 0 : unitShift * sign * 0.35),
+      y: hover * 0.22,
+      width: spec.alongX ? w * 0.22 : d * 0.7,
+      depth: spec.alongX ? d * 0.7 : w * 0.22,
+      height: hover * 0.5,
+      color: shade(palette.buildingMid, -0.12),
+      topColor: glow,
+    });
+  }
 
-  // 車体
   const body = drawBox(ctx, camera, {
     x: spec.x,
     z: spec.z,
@@ -774,57 +887,73 @@ export function drawVehicle(
     depth: d,
     height: bodyH,
     color: spec.color,
-    topColor: shade(spec.color, 0.12),
+    topColor: mix(spec.color, '#ffffff', 0.22),
   });
 
   if (spec.long) {
-    // シャトル: 側面は通しの窓帯と光の線、前面は大きな風防
     for (const face of body.faces) {
       if (isEnd(face.index)) {
-        faceRect(ctx, face.basis, 0.08, 0.42, 0.92, 0.9, face.index === frontIndex ? glassFront : glass, 0.94);
+        faceRect(ctx, face.basis, 0.1, 0.38, 0.9, 0.92, face.index === frontIndex ? glassFront : glass, 0.95);
+        if (spec.detailed && face.index === frontIndex) {
+          faceRect(ctx, face.basis, 0.14, 0.52, 0.5, 0.82, '#ffffff', 0.28);
+        }
         continue;
       }
-      faceRect(ctx, face.basis, 0.06, 0.46, 0.94, 0.86, glass, 0.92);
-      faceRect(ctx, face.basis, 0.04, 0.14, 0.96, 0.22, glow, 0.9);
+      faceRect(ctx, face.basis, 0.05, 0.42, 0.95, 0.88, glass, 0.94);
+      faceRect(ctx, face.basis, 0.03, 0.12, 0.97, 0.22, glow, 0.92);
       if (spec.detailed) {
-        faceRect(ctx, face.basis, 0.1, 0.72, 0.5, 0.82, '#ffffff', 0.22);
+        for (let i = 1; i < 5; i += 1) {
+          const u = 0.05 + (0.9 / 5) * i;
+          faceRect(ctx, face.basis, u - 0.008, 0.42, u + 0.008, 0.88, mix(spec.color, '#ffffff', 0.35), 0.7);
+        }
+        faceRect(ctx, face.basis, 0.08, 0.72, 0.38, 0.84, '#ffffff', 0.22);
       }
     }
   } else {
-    // ポッド: 低い車体の上に、前寄りのガラスの天蓋
     for (const face of body.faces) {
-      if (!isEnd(face.index)) faceRect(ctx, face.basis, 0.05, 0.3, 0.95, 0.44, glow, 0.85);
+      if (!isEnd(face.index)) faceRect(ctx, face.basis, 0.04, 0.22, 0.96, 0.36, glow, 0.88);
     }
-    const shift = length * 0.05 * direction;
+    const shift = length * 0.06 * direction;
     const canopy = drawBox(ctx, camera, {
       x: spec.x + (spec.alongX ? shift : 0),
       z: spec.z + (spec.alongX ? 0 : shift),
       y: hover + bodyH,
-      width: spec.alongX ? length * 0.56 : width * 0.8,
-      depth: spec.alongX ? width * 0.8 : length * 0.56,
-      height: 0.013,
+      width: spec.alongX ? length * 0.58 : width * 0.82,
+      depth: spec.alongX ? width * 0.82 : length * 0.58,
+      height: 0.014,
       color: glass,
-      topColor: mix(glass, '#ffffff', 0.3),
+      topColor: mix(glassFront, '#ffffff', 0.28),
     });
     if (spec.detailed) {
       for (const face of canopy.faces) {
-        faceRect(ctx, face.basis, 0.12, 0.5, 0.42, 0.88, '#ffffff', face.index === frontIndex ? 0.4 : 0.22);
+        if (face.index === frontIndex) {
+          faceRect(ctx, face.basis, 0.08, 0.18, 0.92, 0.92, glassFront, 0.9);
+          faceRect(ctx, face.basis, 0.14, 0.48, 0.48, 0.86, '#ffffff', 0.38);
+        } else if (!isEnd(face.index)) {
+          faceRect(ctx, face.basis, 0.08, 0.22, 0.92, 0.86, glass, 0.88);
+          faceRect(ctx, face.basis, 0.12, 0.62, 0.42, 0.8, '#ffffff', 0.2);
+        }
       }
     }
   }
 
   if (!spec.detailed) return;
 
-  // 前は白い光の帯、後ろは赤い光の帯
   for (const face of body.faces) {
-    const v0 = spec.long ? 0.26 : 0.5;
-    const v1 = spec.long ? 0.36 : 0.74;
     if (face.index === frontIndex) {
-      faceRect(ctx, face.basis, 0.08, v0, 0.92, v1, '#f4fbff', 0.96);
+      faceRect(ctx, face.basis, 0.08, spec.long ? 0.18 : 0.42, 0.92, spec.long ? 0.32 : 0.68, '#ffffff', 0.96);
+      faceRect(ctx, face.basis, 0.12, spec.long ? 0.2 : 0.46, 0.36, spec.long ? 0.3 : 0.64, glow, 0.85);
+      faceRect(ctx, face.basis, 0.64, spec.long ? 0.2 : 0.46, 0.88, spec.long ? 0.3 : 0.64, glow, 0.85);
     } else if (face.index === backIndex) {
-      faceRect(ctx, face.basis, 0.08, v0, 0.92, v1, '#ff4f7a', 0.9);
+      faceRect(ctx, face.basis, 0.1, spec.long ? 0.2 : 0.46, 0.9, spec.long ? 0.32 : 0.7, '#ef5a4c', 0.88);
     }
   }
+
+  // 屋根のセンサー（ライダー）
+  const roofY = hover + bodyH + (spec.long ? 0.002 : 0.016);
+  const sensor = toScreen(camera, spec.x, roofY, spec.z);
+  fillCircle(ctx, sensor.x, sensor.y, Math.max(1.2, camera.span * 0.004), mix(palette.buildingMid, '#ffffff', 0.4));
+  fillCircle(ctx, sensor.x, sensor.y, Math.max(0.7, camera.span * 0.0022), glow);
 }
 
 /** 道路沿いの光の柱（2127 年の街灯）。細い柱の上部が縦に光る。 */
@@ -837,18 +966,18 @@ export function drawStreetLamp(
 ): void {
   const base = toScreen(camera, x, 0, z);
   const k = camera.span / 420;
-  const height = 0.09 * camera.span;
-  const pole = mix(palette.buildingLight, palette.buildingMid, 0.5);
+  const height = 0.1 * camera.span;
+  const pole = mix(palette.buildingLight, palette.buildingMid, 0.45);
   const light = glowColor(palette);
 
-  fillEllipse(ctx, base.x, base.y, 2.6 * k, 1.3 * k, shade(palette.buildingMid, -0.3), 0.7);
+  fillEllipse(ctx, base.x, base.y, 2.8 * k, 1.4 * k, shade(palette.buildingMid, -0.22), 0.7);
   fillPoly(
     ctx,
     [
-      { x: base.x - 1.5 * k, y: base.y },
-      { x: base.x + 1.5 * k, y: base.y },
-      { x: base.x + 0.9 * k, y: base.y - height },
-      { x: base.x - 0.9 * k, y: base.y - height },
+      { x: base.x - 1.4 * k, y: base.y },
+      { x: base.x + 1.4 * k, y: base.y },
+      { x: base.x + 0.75 * k, y: base.y - height },
+      { x: base.x - 0.75 * k, y: base.y - height },
     ],
     pole,
   );
@@ -856,30 +985,30 @@ export function drawStreetLamp(
     ctx,
     [
       { x: base.x, y: base.y },
-      { x: base.x + 1.5 * k, y: base.y },
-      { x: base.x + 0.9 * k, y: base.y - height },
+      { x: base.x + 1.4 * k, y: base.y },
+      { x: base.x + 0.75 * k, y: base.y - height },
       { x: base.x, y: base.y - height },
     ],
-    shade(pole, -0.2),
+    shade(pole, -0.16),
     0.8,
   );
 
-  // 上部の発光バー
   const barTop = base.y - height;
-  const barBottom = base.y - height * 0.6;
-  drawGlow(ctx, base.x, (barTop + barBottom) / 2, camera.span * 0.032, light, 0.55);
+  const barBottom = base.y - height * 0.58;
+  drawGlow(ctx, base.x, (barTop + barBottom) / 2, camera.span * 0.038, light, 0.6);
   fillPoly(
     ctx,
     [
-      { x: base.x - 1.2 * k, y: barBottom },
-      { x: base.x + 1.2 * k, y: barBottom },
-      { x: base.x + 1.2 * k, y: barTop },
-      { x: base.x - 1.2 * k, y: barTop },
+      { x: base.x - 1.15 * k, y: barBottom },
+      { x: base.x + 1.15 * k, y: barBottom },
+      { x: base.x + 1.15 * k, y: barTop },
+      { x: base.x - 1.15 * k, y: barTop },
     ],
     '#ffffff',
-    0.95,
+    0.96,
   );
-  fillCircle(ctx, base.x, barTop - 1.2 * k, 1.7 * k, light);
+  fillCircle(ctx, base.x, barTop - 1.4 * k, 1.9 * k, light);
+  fillCircle(ctx, base.x - 0.4 * k, barTop - 1.7 * k, 0.6 * k, '#ffffff', 0.7);
 }
 
 export function drawBench(
@@ -897,11 +1026,11 @@ export function drawBench(
     width: alongX ? 0.062 : 0.024,
     depth: alongX ? 0.024 : 0.062,
     height: 0.012,
-    color: mix(palette.buildingMid, '#a07a4e', 0.45),
+    color: mix(palette.buildingMid, palette.bark, 0.6),
   });
 }
 
-/** 水上艇（細い船体にガラスの天蓋、船尾に白い引き波）。 */
+/** 水上艇（尖った船首、ガラスの天蓋、船尾の引き波）。 */
 export function drawBoat(
   ctx: Ctx,
   camera: IsoCamera,
@@ -911,39 +1040,49 @@ export function drawBoat(
   color: string,
   palette: DioramaPalette,
 ): void {
-  const len = 0.11;
-  const wid = 0.042;
+  const len = 0.12;
+  const wid = 0.04;
+  const glow = glowColor(palette);
   drawSurface(ctx, camera, {
-    x: x - (alongX ? len * 0.7 : 0),
-    z: z - (alongX ? 0 : len * 0.7),
-    width: alongX ? len * 0.9 : wid * 0.55,
-    depth: alongX ? wid * 0.55 : len * 0.9,
-    y: 0.0016,
+    x: x - (alongX ? len * 0.55 : 0),
+    z: z - (alongX ? 0 : len * 0.55),
+    width: alongX ? len * 1.15 : wid * 0.7,
+    depth: alongX ? wid * 0.7 : len * 1.15,
+    y: 0.0015,
     color: '#ffffff',
-    alpha: 0.4,
+    alpha: 0.36,
   });
   const hull = drawBox(ctx, camera, {
     x,
     z,
-    y: 0.005,
+    y: 0.004,
     width: alongX ? len : wid,
     depth: alongX ? wid : len,
-    height: 0.016,
+    height: 0.015,
     color,
+    topColor: mix(color, '#ffffff', 0.22),
   });
   for (const face of hull.faces) {
-    faceRect(ctx, face.basis, 0.05, 0.56, 0.95, 0.72, glowColor(palette), 0.85);
+    faceRect(ctx, face.basis, 0.04, 0.58, 0.96, 0.78, glow, 0.8);
   }
+  const nose = alongX ? 0.055 : 0;
+  const noseZ = alongX ? 0 : 0.055;
+  const bow = toScreen(camera, x + nose, 0.012, z + noseZ);
+  const port = toScreen(camera, x + (alongX ? len * 0.18 : -wid * 0.42), 0.006, z + (alongX ? -wid * 0.42 : len * 0.18));
+  const star = toScreen(camera, x + (alongX ? len * 0.18 : wid * 0.42), 0.006, z + (alongX ? wid * 0.42 : len * 0.18));
+  fillPoly(ctx, [bow, port, star], mix(color, '#ffffff', 0.12), 0.92);
   drawBox(ctx, camera, {
-    x,
-    z,
-    y: 0.021,
-    width: alongX ? len * 0.45 : wid * 0.72,
-    depth: alongX ? wid * 0.72 : len * 0.45,
-    height: 0.012,
-    color: mix(palette.buildingGlass, '#1d2a3a', 0.35),
-    topColor: mix(palette.buildingGlass, '#ffffff', 0.3),
+    x: x - (alongX ? len * 0.06 : 0),
+    z: z - (alongX ? 0 : len * 0.06),
+    y: 0.019,
+    width: alongX ? len * 0.42 : wid * 0.68,
+    depth: alongX ? wid * 0.68 : len * 0.42,
+    height: 0.014,
+    color: palette.glassDeep,
+    topColor: mix(palette.buildingGlass, '#ffffff', 0.38),
   });
+  const mast = toScreen(camera, x, 0.046, z);
+  fillCircle(ctx, mast.x, mast.y, Math.max(0.8, camera.span * 0.003), glow, 0.85);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1021,9 +1160,9 @@ export function paintBackdrop(ctx: Ctx, width: number, height: number, backgroun
     height * 0.5,
     Math.max(width, height) * 0.72,
   );
-  gradient.addColorStop(0, shade(background, 0.12));
-  gradient.addColorStop(0.55, shade(background, 0.03));
-  gradient.addColorStop(1, shade(background, -0.06));
+  gradient.addColorStop(0, shade(background, 0.06));
+  gradient.addColorStop(0.55, shade(background, 0.02));
+  gradient.addColorStop(1, shade(background, -0.03));
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, width, height);
 }
@@ -1080,49 +1219,39 @@ export function drawFrustum(
   for (const item of list) fillPoly(ctx, item.points, item.color);
 }
 
-/** 公園の芝生。刈り目の縞と小さな花で、ただの緑の面にしない。 */
+/** 公園の白い床。アクセントの点だけを散らす。 */
 export function drawLawn(
   ctx: Ctx,
   camera: IsoCamera,
   lawn: { id: string; x: number; z: number; width: number; depth: number },
   palette: DioramaPalette,
 ): void {
-  const grass = mix(palette.foliage, palette.platformTop, 0.34);
-  // 縁（生け垣の根元）
-  drawSurface(ctx, camera, { x: lawn.x, z: lawn.z, width: lawn.width, depth: lawn.depth, y: 0.0012, color: shade(grass, -0.16) });
+  const pad = mix(palette.platformTop, palette.foliage, 0.08);
   drawSurface(ctx, camera, {
     x: lawn.x,
     z: lawn.z,
-    width: lawn.width * 0.9,
-    depth: lawn.depth * 0.9,
-    y: 0.0014,
-    color: grass,
+    width: lawn.width,
+    depth: lawn.depth,
+    y: 0.0012,
+    color: mix(pad, '#ffffff', 0.35),
   });
-  // 刈り目の縞
-  const stripes = 4;
-  for (let i = 0; i < stripes; i += 2) {
-    const u = -0.45 + (0.9 / stripes) * (i + 0.5);
-    drawSurface(ctx, camera, {
-      x: lawn.x + u * lawn.width,
-      z: lawn.z,
-      width: (lawn.width * 0.9) / stripes,
-      depth: lawn.depth * 0.9,
-      y: 0.0016,
-      color: shade(grass, 0.07),
-      alpha: 0.8,
-    });
-  }
-  // 花
+  drawSurface(ctx, camera, {
+    x: lawn.x,
+    z: lawn.z,
+    width: lawn.width * 0.92,
+    depth: lawn.depth * 0.92,
+    y: 0.0014,
+    color: pad,
+  });
   const rng = createRng(`lawn:${lawn.id}`);
-  const flowers = [palette.accentSecondary, '#ffffff', mix(palette.accentPrimary, '#ffffff', 0.4)];
-  for (let i = 0; i < 7; i += 1) {
+  for (let i = 0; i < 6; i += 1) {
     const p = toScreen(
       camera,
-      lawn.x + rng.range(-0.4, 0.4) * lawn.width,
+      lawn.x + rng.range(-0.38, 0.38) * lawn.width,
       0.002,
-      lawn.z + rng.range(-0.4, 0.4) * lawn.depth,
+      lawn.z + rng.range(-0.38, 0.38) * lawn.depth,
     );
-    fillCircle(ctx, p.x, p.y, Math.max(0.8, camera.span * 0.0045), rng.pick(flowers), 0.9);
+    fillCircle(ctx, p.x, p.y, Math.max(0.6, camera.span * 0.0032), palette.accentPrimary, 0.35);
   }
 }
 
@@ -1186,7 +1315,7 @@ export function drawSignalPost(
 ): void {
   const base = toScreen(camera, x, 0, z);
   const height = 0.1 * camera.span;
-  const pole = shade(palette.buildingMid, -0.45);
+  const pole = shade(palette.buildingMid, -0.18);
   fillPoly(
     ctx,
     [
@@ -1200,26 +1329,30 @@ export function drawSignalPost(
   const w = camera.span * 0.03;
   const h = camera.span * 0.012;
   ctx.globalAlpha = opacityScale;
-  ctx.fillStyle = shade(palette.buildingMid, -0.55);
+  ctx.fillStyle = shade(palette.buildingMid, -0.28);
   ctx.beginPath();
   ctx.roundRect(base.x - w / 2, base.y - height - h, w, h, h * 0.4);
   ctx.fill();
   ctx.globalAlpha = 1;
 }
 
-/** 信号の灯り。state に応じて左（青）・中（黄）・右（赤）のどれかが灯る。 */
+/**
+ * 信号の灯り。進行・注意・停止は本来の緑・黄・赤で示す。
+ */
 export function drawSignalLamp(
   ctx: Ctx,
   camera: IsoCamera,
   x: number,
   z: number,
   state: 'go' | 'caution' | 'stop',
+  palette: DioramaPalette,
 ): void {
   const base = toScreen(camera, x, 0, z);
   const height = 0.1 * camera.span;
   const w = camera.span * 0.03;
   const h = camera.span * 0.012;
   const cy = base.y - height - h / 2;
+  const off = shade(palette.buildingMid, -0.3);
   const slots = [
     { u: -0.3, color: '#39c47a', on: state === 'go' },
     { u: 0, color: '#f2c14e', on: state === 'caution' },
@@ -1227,8 +1360,9 @@ export function drawSignalLamp(
   ];
   for (const slot of slots) {
     const cx = base.x + slot.u * w;
-    if (slot.on) fillCircle(ctx, cx, cy, h * 0.95, slot.color, 0.28);
-    fillCircle(ctx, cx, cy, h * 0.32, slot.on ? slot.color : '#3b3f48', slot.on ? 1 : 0.9);
+    if (slot.on) fillCircle(ctx, cx, cy, h * 1.15, slot.color, 0.38);
+    fillCircle(ctx, cx, cy, h * 0.34, slot.on ? slot.color : off, slot.on ? 1 : 0.85);
+    if (slot.on) fillCircle(ctx, cx - h * 0.08, cy - h * 0.08, h * 0.12, '#ffffff', 0.7);
   }
 }
 

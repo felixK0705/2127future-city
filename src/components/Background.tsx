@@ -17,10 +17,11 @@ export function Background({ phase }: { phase: string }) {
       const orbs = [...root.querySelectorAll<HTMLElement>('.bg__orb')]
       const drift = orbs.map((orb, index) =>
         gsap.to(orb, {
-          xPercent: index % 2 === 0 ? 16 : -18,
-          yPercent: index % 2 === 0 ? -12 : 14,
-          scale: 1.18 - index * 0.06,
-          duration: 18 + index * 6,
+          xPercent: index % 2 === 0 ? 38 : -42,
+          yPercent: index % 2 === 0 ? -28 : 32,
+          rotation: index % 2 === 0 ? 18 : -16,
+          scale: 1.28 - index * 0.08,
+          duration: 26 + index * 8,
           repeat: -1,
           yoyo: true,
           ease: 'sine.inOut',
@@ -58,7 +59,6 @@ export function Background({ phase }: { phase: string }) {
     if (rootRef.current) {
       gsap.to(rootRef.current, {
         opacity: warping ? 1 : 0.9,
-        scale: warping ? 1.12 : 1,
         duration: 1.1,
         ease: 'power2.inOut',
       })

@@ -9,7 +9,7 @@ import {
   TimeJump,
   WhyPanel,
 } from './components/Experience'
-import { getArchetype, inkOf } from './core-city'
+import { accentForArchetype, getArchetype, inkOf, rgba } from './core-city'
 import { findPolicy } from './data/policies'
 import { scoreArchetype } from './lib/archetypeScoring'
 import { calculateScores, isCompleteChoices } from './lib/scoring'
@@ -19,6 +19,7 @@ import { CATEGORY_KEYS, type CategoryKey, type Choices } from './types'
 type Phase = 'intro' | 'policies' | 'jump' | 'reveal' | 'why' | 'souvenir' | 'reflection'
 const DEFAULT_ARCHETYPE_ID = 'OFEC'
 const DEFAULT_CITY_NAME = '余白市'
+const BRAND_ACCENT = '#d93f3f'
 
 function readSharedDesign() {
   const params = new URLSearchParams(window.location.search)
@@ -38,9 +39,11 @@ function readSharedDesign() {
 export default function App() {
   const shared = useMemo(readSharedDesign, [])
   const [phase, setPhase] = useState<Phase>(shared.complete ? 'souvenir' : 'intro')
+  const [jumpCover, setJumpCover] = useState(false)
   const [step, setStep] = useState(0)
   const [choices, setChoices] = useState<Choices>(shared.choices)
   const [cityName, setCityName] = useState(shared.cityName)
+  const [nickname, setNickname] = useState('')
   const submitted = useRef(shared.complete)
   const scores = useMemo(() => calculateScores(choices), [choices])
   const archetype = useMemo(
@@ -53,7 +56,11 @@ export default function App() {
     document.title = `${cityName}｜2127 未来都市デザイナー`
   }, [phase, cityName])
 
-  const goToReveal = useCallback(() => setPhase('reveal'), [])
+  const goToReveal = useCallback(() => {
+    setPhase('reveal')
+    setJumpCover(true)
+  }, [])
+  const dismissJump = useCallback(() => setJumpCover(false), [])
 
   const choosePolicy = (category: CategoryKey, policy: string) => {
     setChoices((current) => ({ ...current, [category]: policy }))
@@ -75,21 +82,31 @@ export default function App() {
     setChoices({})
     setStep(0)
     setCityName(DEFAULT_CITY_NAME)
+    setNickname('')
     submitted.current = false
+    setJumpCover(false)
     setPhase('intro')
   }
 
-  const accent = archetype.visual.palette.accent
+  // 都市色は揭示以降。TIME JUMP まではブランドの赤を残す。
+  const accent =
+    isCompleteChoices(choices) && phase !== 'jump'
+      ? accentForArchetype(archetype.id).primary
+      : BRAND_ACCENT
   const commonStyle = {
     '--accent': accent,
     '--accent-ink': inkOf(accent, '#ebebec'),
+    '--red': accent,
+    '--red-soft': rgba(accent, 0.12),
   } as React.CSSProperties
 
   return (
-    <div className={`app phase-${phase}`} style={commonStyle}>
+    <div className={`app phase-${phase}${jumpCover ? ' is-jump-cover' : ''}`} style={commonStyle}>
       <a className="skip-link" href="#main-content">本文へ移動する</a>
       <Background phase={phase} />
-      {phase === 'intro' && <Intro onStart={() => setPhase('policies')} />}
+      {phase === 'intro' && (
+        <Intro nickname={nickname} setNickname={setNickname} onStart={() => setPhase('policies')} />
+      )}
       {phase === 'policies' && (
         <PolicyFlow
           choices={choices}
@@ -99,11 +116,12 @@ export default function App() {
           onComplete={completePolicies}
         />
       )}
-      {phase === 'jump' && <TimeJump onArrive={goToReveal} />}
+      {(phase === 'jump' || jumpCover) && <TimeJump onArrive={goToReveal} onDismiss={dismissJump} />}
       {phase === 'reveal' && (
         <CityReveal
           cityName={archetype.cityName}
           title={archetype.title}
+          nickname={nickname}
           scores={scores}
           archetypeId={archetype.id}
           onContinue={() => setPhase('why')}

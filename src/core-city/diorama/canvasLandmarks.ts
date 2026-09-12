@@ -115,8 +115,8 @@ function signalTower(
     // 鉄骨の斜材
     if (detailed) {
       for (const face of seg.faces) {
-        faceRect(ctx, face.basis, 0.04, 0, 0.1, 1, shade(p.buildingMid, -0.2), 0.55);
-        faceRect(ctx, face.basis, 0.9, 0, 0.96, 1, shade(p.buildingMid, -0.2), 0.55);
+        faceRect(ctx, face.basis, 0.04, 0, 0.1, 1, shade(p.buildingMid, -0.15), 0.55);
+        faceRect(ctx, face.basis, 0.9, 0, 0.96, 1, shade(p.buildingMid, -0.15), 0.55);
         faceRect(ctx, face.basis, 0.1, 0.46, 0.9, 0.54, shade(p.buildingMid, -0.12), 0.4);
       }
     }
@@ -210,7 +210,7 @@ function clockTower(
     ctx.fill();
     if (detailed) {
       // 面の座標は v が上向き。短針は真上、長針は右
-      ctx.fillStyle = shade(p.buildingMid, -0.5);
+      ctx.fillStyle = shade(p.buildingMid, -0.15);
       ctx.fillRect(0.488, 0.82, 0.024, ry * 0.62);
       ctx.fillRect(0.5, 0.82 - ry * 0.05, 0.2, ry * 0.1);
     }
@@ -301,7 +301,7 @@ function domeHall(
   // 子午線のリブ
   if (detailed) {
     ctx.save();
-    ctx.strokeStyle = shade(p.roof, -0.18);
+    ctx.strokeStyle = shade(p.roof, -0.15);
     ctx.lineWidth = 1.1;
     ctx.globalAlpha = 0.55;
     for (let i = 1; i < 5; i += 1) {
@@ -430,7 +430,7 @@ function skyscraper(
       { x: top.x + 0.7, y: top.y - mast },
       { x: top.x - 0.7, y: top.y - mast },
     ],
-    shade(p.buildingMid, -0.2),
+    shade(p.buildingMid, -0.15),
   );
   fillCircle(ctx, top.x, top.y - mast, 3, accent);
 }
@@ -464,7 +464,7 @@ function pagoda(
         const slats = 5;
         for (let s = 0; s < slats; s += 1) {
           const u = 0.14 + (0.72 / slats) * s;
-          faceRect(ctx, face.basis, u, 0.22, u + (0.72 / slats) * 0.5, 0.78, shade(p.buildingMid, -0.18), 0.55);
+          faceRect(ctx, face.basis, u, 0.22, u + (0.72 / slats) * 0.5, 0.78, shade(p.buildingMid, -0.15), 0.55);
         }
       }
     }
@@ -562,7 +562,7 @@ function windmillBase(
       const posts = 7;
       for (let i = 0; i < posts; i += 1) {
         const u = 0.06 + (0.88 / posts) * i;
-        faceRect(ctx, face.basis, u, 0.1, u + 0.02, 0.95, shade(p.buildingMid, -0.2), 0.8);
+        faceRect(ctx, face.basis, u, 0.1, u + 0.02, 0.95, shade(p.buildingMid, -0.15), 0.8);
       }
     }
   }
@@ -572,7 +572,7 @@ function windmillBase(
   // 実際に積んだ段の面へ直接載せる。
   const doorFace = segmentFaces[0]?.find((face) => face.index === 2);
   if (doorFace && detailed) {
-    faceRect(ctx, doorFace.basis, 0.34, 0, 0.66, 0.78, mix(accent, '#5a3a24', 0.55), 0.95);
+    faceRect(ctx, doorFace.basis, 0.34, 0, 0.66, 0.78, mix(accent, p.bark, 0.55), 0.95);
     faceRect(ctx, doorFace.basis, 0.3, 0.78, 0.7, 0.88, shade(p.buildingLight, -0.16), 0.9);
   }
   for (const face of segmentFaces[2] ?? []) {
@@ -631,12 +631,12 @@ function ferrisBase(
         { x: hub.x + 4, y: hub.y },
         { x: hub.x - 4, y: hub.y },
       ],
-      shade(p.buildingMid, side > 0 ? -0.08 : -0.22),
+      shade(p.buildingMid, side > 0 ? -0.08 : -0.15),
     );
     if (detailed) {
       // 補強の斜材
       ctx.save();
-      ctx.strokeStyle = shade(p.buildingMid, -0.3);
+      ctx.strokeStyle = shade(p.buildingMid, -0.15);
       ctx.lineWidth = 1.2;
       ctx.globalAlpha = 0.7;
       for (let i = 1; i < 4; i += 1) {
@@ -721,7 +721,7 @@ function windmillSpinner(
   const axisX = { x: alongX.x - hub.x, y: alongX.y - hub.y };
   const axisUp = { x: up.x - hub.x, y: up.y - hub.y };
   if (nearlyEdgeOn(axisX, axisUp)) {
-    edgeOnBar(ctx, hub, axisUp, length, shade(p.buildingMid, -0.25));
+    edgeOnBar(ctx, hub, axisUp, length, shade(p.buildingMid, -0.15));
     return;
   }
 
@@ -743,7 +743,7 @@ function windmillSpinner(
         { x: length, y: length * 0.02 },
         { x: 0, y: length * 0.035 },
       ],
-      shade(p.buildingMid, -0.25),
+      shade(p.buildingMid, -0.15),
     );
     // 帆
     fillPoly(
@@ -758,7 +758,7 @@ function windmillSpinner(
     );
     if (detailed) {
       // 帆の桟
-      ctx.strokeStyle = shade(p.buildingMid, -0.3);
+      ctx.strokeStyle = shade(p.buildingMid, -0.15);
       // 座標系がワールド単位なので、線幅も画面 0.9px 相当に換算する
       ctx.lineWidth = 0.9 / cam.span;
       ctx.globalAlpha = 0.7;
@@ -913,7 +913,7 @@ export function drawLandmarkSpinner(
   else if (landmark.kind === 'windTurbine') windTurbineSpinner(ctx, camera, landmark, palette, angle);
   else if (landmark.kind === 'aiCore') aiCoreSpinner(ctx, camera, landmark, palette, angle);
   else if (landmark.kind === 'skyTether') skyTetherSpinner(ctx, camera, landmark, palette, angle);
-  else if (landmark.kind === 'watchPylon') watchPylonSpinner(ctx, camera, landmark, angle);
+  else if (landmark.kind === 'watchPylon') watchPylonSpinner(ctx, camera, landmark, palette, angle);
 }
 
 export { createRng };

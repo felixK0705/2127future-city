@@ -35,47 +35,28 @@ interface SkyTone {
   readonly stars: boolean;
 }
 
+/**
+ * スタジオのホリゾント。
+ *
+ * 劇的な空は描かない。上がわずかにライトグレー、下が白へ抜ける無限遠の背景で、
+ * 山並みは色ではなく「霞の層」として置く。ムードは 2〜4% の傾きだけに使う。
+ */
 function skyTone(background: string, mood: DioramaMood): SkyTone {
-  switch (mood) {
-    case 'dusk':
-      return {
-        top: mix(background, '#6c6fb0', 0.4),
-        horizon: mix(background, '#ffc7a6', 0.62),
-        sun: '#ffe2c4',
-        mountain: mix(background, '#7a6f9a', 0.36),
-        haze: mix(background, '#ffd9c7', 0.5),
-        stars: true,
-      };
-    case 'cool':
-      return {
-        top: mix(background, '#8fb3da', 0.34),
-        horizon: mix(background, '#f3f8ff', 0.66),
-        sun: '#ffffff',
-        mountain: mix(background, '#7d93ad', 0.3),
-        haze: mix(background, '#ffffff', 0.55),
-        stars: false,
-      };
-    case 'warm':
-      return {
-        top: mix(background, '#9dbfe0', 0.3),
-        horizon: mix(background, '#fff0d8', 0.66),
-        sun: '#fff5dc',
-        mountain: mix(background, '#9a8f86', 0.28),
-        haze: mix(background, '#fff4e4', 0.56),
-        stars: false,
-      };
-    case 'calm':
-    case 'daylight':
-    default:
-      return {
-        top: mix(background, '#9cc3ea', 0.34),
-        horizon: mix(background, '#fff8ec', 0.64),
-        sun: '#fffaf0',
-        mountain: mix(background, '#8499ae', 0.28),
-        haze: mix(background, '#ffffff', 0.55),
-        stars: false,
-      };
-  }
+  // 背景はほぼ無彩色に保つ。色は模型の側だけに置き、背景に混ぜない
+  const bias =
+    mood === 'warm' || mood === 'dusk'
+      ? '#faf8f6' // ごくわずかに暖かいグレー
+      : mood === 'cool'
+        ? '#f6f8fa' // ごくわずかに冷たいグレー
+        : '#f8f9fa';
+  return {
+    top: mix(mix(background, bias, 0.75), '#dde3e7', 0.6),
+    horizon: mix(bias, '#ffffff', 0.7),
+    sun: '#ffffff',
+    mountain: mix(bias, '#e2e7ea', 0.7),
+    haze: mix(bias, '#ffffff', 0.6),
+    stars: false,
+  };
 }
 
 export interface Scenery {
@@ -260,10 +241,10 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
     warm: rng.chance(0.5),
   }));
 
-  const cloudSea = Array.from({ length: 11 }, (_, i) => ({
-    u: (i + rng.range(-0.3, 0.3)) / 10,
-    lift: rng.range(-0.02, 0.035),
-    size: rng.range(0.07, 0.11),
+  const cloudSea = Array.from({ length: 6 }, (_, i) => ({
+    u: (i + rng.range(-0.3, 0.3)) / 5.6,
+    lift: rng.range(-0.03, 0.015),
+    size: rng.range(0.05, 0.08),
     speed: rng.range(0.004, 0.009),
     phase: rng.range(0, 1),
   }));
@@ -294,57 +275,29 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
       }
     }
 
-    // 太陽とそのにじみ
+    // 主光源。円盤は描かず、スタジオのソフトボックスのような広いにじみだけを置く
     const sun = sunAt(width, height);
-    const reach = Math.max(width, height) * 0.62;
+    const reach = Math.max(width, height) * 0.78;
     const glow = ctx.createRadialGradient(sun.x, sun.y, 0, sun.x, sun.y, reach);
-    glow.addColorStop(0, rgba(tone.sun, 0.9));
-    glow.addColorStop(0.08, rgba(tone.sun, 0.55));
-    glow.addColorStop(0.35, rgba(tone.sun, 0.16));
+    glow.addColorStop(0, rgba(tone.sun, 0.85));
+    glow.addColorStop(0.3, rgba(tone.sun, 0.38));
     glow.addColorStop(1, rgba(tone.sun, 0));
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, width, height);
-    fillCircle(ctx, sun.x, sun.y, Math.min(width, height) * 0.045, '#ffffff', 0.92);
 
-    // 軌道の環（100 年後の空）: 空の高いところを横切る細い弧
+    // 軌道の環（100 年後の空）: 細い線 1 本だけ、ほとんど見えない濃さで
     ctx.save();
-    ctx.strokeStyle = rgba('#ffffff', 0.55);
-    ctx.lineWidth = Math.max(1, height * 0.0022);
+    ctx.strokeStyle = rgba('#ffffff', 0.5);
+    ctx.lineWidth = Math.max(1, height * 0.0018);
     ctx.beginPath();
     ctx.ellipse(width * 0.56, height * 0.34, width * 0.78, height * 0.2, -0.1, Math.PI * 1.08, Math.PI * 1.92);
     ctx.stroke();
-    ctx.strokeStyle = rgba('#ffffff', 0.2);
-    ctx.lineWidth = Math.max(2, height * 0.007);
-    ctx.beginPath();
-    ctx.ellipse(width * 0.56, height * 0.34, width * 0.8, height * 0.21, -0.1, Math.PI * 1.08, Math.PI * 1.92);
-    ctx.stroke();
     ctx.restore();
 
-    // 光の筋（太陽から斜め下へ、ごく薄く）
-    for (let i = 0; i < 6; i += 1) {
-      const a = 0.35 + i * 0.16;
-      const spread = 0.035 + (i % 2) * 0.02;
-      const far = Math.hypot(width, height);
-      fillPoly(
-        ctx,
-        [
-          sun,
-          { x: sun.x + Math.cos(a - spread) * far, y: sun.y + Math.sin(a - spread) * far },
-          { x: sun.x + Math.cos(a + spread) * far, y: sun.y + Math.sin(a + spread) * far },
-        ],
-        '#ffffff',
-        0.05,
-      );
-    }
-
-    // 山並み（奥ほど淡く、霞に溶ける）。街を回すと、奥の山ほどゆっくり流れる
-    const bases = [0.6, 0.69, 0.79];
-    const amps = [0.085, 0.07, 0.055];
-    const colors = [
-      mix(tone.mountain, tone.horizon, 0.55),
-      mix(tone.mountain, tone.horizon, 0.3),
-      mix(mix(tone.mountain, palette.foliage, 0.35), tone.horizon, 0.18),
-    ];
+    // 遠景の稜線。スタジオの背景なので山としては描かず、
+    // 地平へ向かう薄い霞の層としてだけ置く（輪郭が見えるほど濃くしない）
+    const bases = [0.62, 0.71, 0.8];
+    const amps = [0.05, 0.04, 0.03];
     const period = width * 2.2;
     for (const ridge of ridges) {
       const shift = camera.rot * width * (0.12 + ridge.layer * 0.1);
@@ -359,14 +312,14 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
         points.push({ x, y: baseY - amp * (0.55 + h * 0.6) });
       }
       points.push({ x: width + 10, y: height + 10 });
-      fillPoly(ctx, points, colors[ridge.layer]!);
+      fillPoly(ctx, points, mix(tone.mountain, tone.horizon, 0.5), 0.5);
 
-      // 山裾の霞
-      const mist = ctx.createLinearGradient(0, baseY - amp * 0.2, 0, baseY + height * 0.08);
+      // 裾の霞（稜線を完全に溶かす）
+      const mist = ctx.createLinearGradient(0, baseY - amp * 1.2, 0, baseY + height * 0.1);
       mist.addColorStop(0, rgba(tone.haze, 0));
-      mist.addColorStop(1, rgba(tone.haze, 0.7));
+      mist.addColorStop(1, rgba(tone.haze, 0.92));
       ctx.fillStyle = mist;
-      ctx.fillRect(0, baseY - amp * 0.2, width, height);
+      ctx.fillRect(0, baseY - amp * 1.2, width, height);
     }
   }
 
@@ -400,7 +353,7 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
     // 遠いものほど空気に溶ける
     const haze = 0.5 - ((islet.parallax - 0.14) / 0.14) * 0.28;
     const grass = mix(mix(palette.foliage, palette.platformTop, 0.2), tone.haze, haze);
-    const rock = mix(mix(palette.platformUnder, '#8f8276', 0.4), tone.haze, haze);
+    const rock = mix(palette.rock, tone.haze, haze);
     const outline = islet.top.map((p) => ({ x: x + p.x * r, y: y + p.y * r }));
     const tip = { x: x + islet.tip.x * r, y: y + islet.tip.y * r };
     const left = { x: x - r * 0.98, y };
@@ -437,10 +390,19 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
     if (islet.tree) {
       const s = r * 0.36;
       const tx = x - r * 0.2;
-      ctx.fillStyle = mix(mix(palette.foliageDeep, '#7a5a3c', 0.7), tone.haze, haze);
-      ctx.fillRect(tx - s * 0.12, y - s * 1.1, s * 0.24, s * 1.1);
-      fillCircle(ctx, tx, y - s * 1.5, s, mix(palette.foliageDeep, tone.haze, haze));
-      fillCircle(ctx, tx - s * 0.25, y - s * 1.75, s * 0.55, mix(shade(palette.foliage, 0.12), tone.haze, haze));
+      const leaf = mix(palette.foliage, tone.haze, haze);
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = mix(palette.bark, tone.haze, haze);
+      ctx.lineWidth = Math.max(0.6, s * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(tx, y);
+      ctx.lineTo(tx, y - s * 1.2);
+      ctx.stroke();
+      ctx.restore();
+      fillCircle(ctx, tx, y - s * 1.45, s * 0.22, leaf, 0.4);
+      fillCircle(ctx, tx - s * 0.18, y - s * 1.6, s * 0.16, leaf, 0.32);
+      fillCircle(ctx, tx + s * 0.16, y - s * 1.55, s * 0.14, leaf, 0.3);
     }
   }
 
@@ -454,41 +416,67 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
     );
     const r = balloon.size * camera.span;
 
-    // 飛行船（細長い気嚢・腹の客室・尾翼・光の帯）
-    const len = r * 2.3;
-    const hgt = r * 0.72;
-    fillEllipse(ctx, point.x + r * 0.1, point.y + hgt * 0.25, len * 1.02, hgt * 1.05, '#000000', 0.05);
+    // 飛行船（気嚢・構造リング・客室窓・推進ポッド・航法灯）
+    const len = r * 2.4;
+    const hgt = r * 0.7;
+    fillEllipse(ctx, point.x + r * 0.1, point.y + hgt * 0.28, len * 1.04, hgt * 1.08, '#000000', 0.06);
     fillPoly(
       ctx,
       [
-        { x: point.x - len * 0.76, y: point.y },
-        { x: point.x - len * 1.12, y: point.y - hgt * 0.95 },
-        { x: point.x - len * 0.98, y: point.y },
+        { x: point.x - len * 0.78, y: point.y },
+        { x: point.x - len * 1.16, y: point.y - hgt * 0.92 },
+        { x: point.x - len * 1.0, y: point.y },
       ],
-      shade(balloon.colorB, -0.12),
+      shade(balloon.colorB, -0.1),
     );
     fillPoly(
       ctx,
       [
-        { x: point.x - len * 0.76, y: point.y },
-        { x: point.x - len * 1.12, y: point.y + hgt * 0.95 },
-        { x: point.x - len * 0.98, y: point.y },
+        { x: point.x - len * 0.78, y: point.y },
+        { x: point.x - len * 1.16, y: point.y + hgt * 0.92 },
+        { x: point.x - len * 1.0, y: point.y },
       ],
-      shade(balloon.colorB, -0.2),
+      shade(balloon.colorB, -0.18),
     );
     fillEllipse(ctx, point.x, point.y, len, hgt, balloon.colorB);
-    fillEllipse(ctx, point.x, point.y + hgt * 0.28, len * 0.97, hgt * 0.7, shade(balloon.colorB, -0.1), 0.55);
-    fillEllipse(ctx, point.x - len * 0.15, point.y - hgt * 0.42, len * 0.6, hgt * 0.26, '#ffffff', 0.6);
-    fillEllipse(ctx, point.x, point.y, len * 0.98, hgt * 0.09, balloon.colorA, 0.9);
+    fillEllipse(ctx, point.x, point.y + hgt * 0.3, len * 0.97, hgt * 0.68, shade(balloon.colorB, -0.08), 0.5);
+    fillEllipse(ctx, point.x - len * 0.16, point.y - hgt * 0.4, len * 0.58, hgt * 0.24, '#ffffff', 0.62);
+    // 構造リング
+    for (const u of [-0.42, -0.08, 0.26]) {
+      fillEllipse(ctx, point.x + len * u, point.y, len * 0.018, hgt * 0.92, mix(balloon.colorA, '#ffffff', 0.2), 0.45);
+    }
+    fillEllipse(ctx, point.x, point.y, len * 0.98, hgt * 0.075, balloon.colorA, 0.92);
 
     ctx.globalAlpha = 1;
-    ctx.fillStyle = shade(palette.buildingMid, -0.05);
+    ctx.fillStyle = shade(palette.buildingMid, -0.04);
     ctx.beginPath();
-    ctx.roundRect(point.x - len * 0.22, point.y + hgt * 0.84, len * 0.44, hgt * 0.42, hgt * 0.18);
+    ctx.roundRect(point.x - len * 0.24, point.y + hgt * 0.82, len * 0.48, hgt * 0.46, hgt * 0.16);
     ctx.fill();
-    ctx.fillStyle = mix(palette.buildingGlass, '#1d2a3a', 0.35);
-    ctx.fillRect(point.x - len * 0.17, point.y + hgt * 0.96, len * 0.34, hgt * 0.14);
+    ctx.fillStyle = mix(palette.buildingLight, '#ffffff', 0.2);
+    ctx.beginPath();
+    ctx.roundRect(point.x - len * 0.22, point.y + hgt * 0.84, len * 0.44, hgt * 0.12, hgt * 0.04);
+    ctx.fill();
+    for (let i = 0; i < 5; i += 1) {
+      const wx = point.x - len * 0.18 + (len * 0.36 * i) / 4;
+      ctx.fillStyle = palette.glassDeep;
+      ctx.fillRect(wx, point.y + hgt * 0.98, len * 0.055, hgt * 0.16);
+      ctx.fillStyle = rgba('#ffffff', 0.28);
+      ctx.fillRect(wx, point.y + hgt * 0.98, len * 0.055, hgt * 0.06);
+    }
+    // 推進ポッド
+    for (const side of [-1, 1] as const) {
+      fillEllipse(
+        ctx,
+        point.x - len * 0.08,
+        point.y + hgt * (0.55 + side * 0.62),
+        len * 0.12,
+        hgt * 0.14,
+        shade(palette.buildingMid, -0.06),
+      );
+      fillCircle(ctx, point.x - len * 0.16, point.y + hgt * (0.55 + side * 0.62), Math.max(1, r * 0.07), palette.glow);
+    }
     fillCircle(ctx, point.x + len * 0.96, point.y, Math.max(1.2, r * 0.08), '#ffffff');
+    fillCircle(ctx, point.x - len * 0.92, point.y + hgt * 0.12, Math.max(1, r * 0.055), palette.accentPrimary);
   }
 
   function paintBehind(
@@ -512,22 +500,19 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
       );
     }
 
-    // 鳥の群れ
-    ctx.strokeStyle = rgba(shade(tone.mountain, -0.35), 0.55);
+    // 小型の飛行体（鳥の群れの代わり）。細い線を 2 本だけ、ほとんど見えない濃さで流す
+    ctx.strokeStyle = rgba(shade(tone.mountain, -0.3), 0.3);
     ctx.lineCap = 'round';
     for (const flock of flocks) {
       const travel = width + 260;
       const base = ((flock.offset * travel + elapsed * flock.speed) % travel) - 130;
-      for (const bird of flock.birds) {
+      for (const bird of flock.birds.slice(0, 2)) {
         const x = base + bird.dx;
-        const y = flock.y * height + bird.dy + Math.sin(elapsed * 0.8 + bird.phase) * 3;
-        const wing = Math.sin(elapsed * 7 + bird.phase) * 2.2 * bird.scale;
-        const span = 5 * bird.scale;
-        ctx.lineWidth = 1.1 * bird.scale;
+        const y = flock.y * height + bird.dy;
+        ctx.lineWidth = 1 * bird.scale;
         ctx.beginPath();
-        ctx.moveTo(x - span, y - wing);
-        ctx.quadraticCurveTo(x - span * 0.4, y - wing * 0.2 - 1, x, y);
-        ctx.quadraticCurveTo(x + span * 0.4, y - wing * 0.2 - 1, x + span, y - wing);
+        ctx.moveTo(x - 4 * bird.scale, y);
+        ctx.lineTo(x + 4 * bird.scale, y);
         ctx.stroke();
       }
     }
@@ -572,8 +557,8 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
     // 太陽のにじみを街の上にもうっすらかけ、空気に包まれた感じを出す
     const sun = sunAt(width, height);
     const bloom = ctx.createRadialGradient(sun.x, sun.y, 0, sun.x, sun.y, Math.max(width, height) * 0.7);
-    bloom.addColorStop(0, rgba(tone.sun, 0.3));
-    bloom.addColorStop(0.45, rgba(tone.sun, 0.08));
+    bloom.addColorStop(0, rgba(tone.sun, 0.18));
+    bloom.addColorStop(0.45, rgba(tone.sun, 0.05));
     bloom.addColorStop(1, rgba(tone.sun, 0));
     ctx.fillStyle = bloom;
     ctx.fillRect(0, 0, width, height);
@@ -587,7 +572,7 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
       Math.max(width, height) * 0.78,
     );
     vignette.addColorStop(0, 'rgba(0,0,0,0)');
-    vignette.addColorStop(1, rgba(shade(tone.mountain, -0.45), 0.16));
+    vignette.addColorStop(1, rgba(shade(tone.mountain, -0.22), 0.1));
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, width, height);
 
@@ -602,24 +587,25 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
   }
 
   function paintIslandUnderside(ctx: Ctx, camera: IsoCamera): void {
-    const earth = mix(palette.platformUnder, '#9b7653', 0.42);
-    const rock = mix(palette.platformUnder, '#8b8d97', 0.38);
+    const earth = palette.soil;
+    const rock = palette.rock;
     const y0 = -thickness;
     drawFrustum(ctx, camera, { top: rim, bottom: soil, yTop: y0, yBottom: y0 - 0.09, color: earth });
     drawFrustum(ctx, camera, { top: soil, bottom: rockA, yTop: y0 - 0.09, yBottom: y0 - 0.34, color: rock });
+    // 岩は白い模型の一部として扱うので、下へ行っても暗く落とさない
     drawFrustum(ctx, camera, {
       top: rockA,
       bottom: rockB,
       yTop: y0 - 0.34,
       yBottom: y0 - 0.56,
-      color: shade(rock, -0.08),
+      color: shade(rock, -0.03),
     });
     drawFrustum(ctx, camera, {
       top: rockB,
       bottom: tip,
       yTop: y0 - 0.56,
       yBottom: y0 - 0.74,
-      color: shade(rock, -0.14),
+      color: shade(rock, -0.06),
     });
   }
 

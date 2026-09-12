@@ -1,9 +1,9 @@
 /* ============================================================
-   2127 — neutral grey canvas, frosted panels, one red accent
+   2127 — neutral grey canvas, frosted panels, one city accent
    ============================================================ */
 :root {
   --red: #d93f3f;
-  --red-soft: rgb(217 63 63 / 12%);
+  --red-soft: color-mix(in srgb, var(--red) 12%, transparent);
   --ink: #1a1a1a;
   --ink-2: #5f6063;
   --ink-3: #8d8f93;
@@ -28,7 +28,7 @@
   --dark-ink: #f4f4f5;
   --dark-ink-2: #a1a1a6;
 
-  /* per-city accent, written by App.tsx (only the SVG fallback uses it) */
+  /* per-city accent — App.tsx writes these once a city is chosen */
   --accent: #d93f3f;
   --accent-ink: #1a1a1a;
 
@@ -168,19 +168,25 @@ button { touch-action: manipulation; }
   will-change: transform, opacity;
 }
 .bg__orb { border-radius: 50%; }
+@keyframes bg-orb-breathe {
+  0%, 100% { opacity: 0.82; }
+  50% { opacity: 1; }
+}
 .bg__orb--primary {
   top: -18vmax;
   left: -8vmax;
   width: 62vmax;
   height: 62vmax;
-  background: radial-gradient(circle, rgb(217 63 63 / 13%), transparent 58%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 20%, transparent), transparent 58%);
+  animation: bg-orb-breathe 16s ease-in-out infinite;
 }
 .bg__orb--tertiary {
   right: -14vmax;
   bottom: -20vmax;
   width: 66vmax;
   height: 66vmax;
-  background: radial-gradient(circle, rgb(217 63 63 / 10%), transparent 56%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 56%);
+  animation: bg-orb-breathe 22s ease-in-out infinite reverse;
 }
 .bg__orb--city {
   top: 22vmax;
@@ -200,14 +206,31 @@ button { touch-action: manipulation; }
 /* the closing screen darkens the whole canvas */
 .phase-reflection .bg { background: var(--dark); }
 .phase-reflection .bg__orb--primary,
-.phase-reflection .bg__orb--tertiary { background: radial-gradient(circle, rgb(217 63 63 / 22%), transparent 58%); }
+.phase-reflection .bg__orb--tertiary { background: radial-gradient(circle, color-mix(in srgb, var(--accent) 22%, transparent), transparent 58%); }
 .phase-reflection .bg__orb--city { background: radial-gradient(circle, rgb(255 255 255 / 5%), transparent 62%); }
 .phase-reflection .bg__grid { display: none; }
 
 /* ============================================================
    Screen shell
    ============================================================ */
-.app { position: relative; min-height: 100svh; }
+@property --red {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d93f3f;
+}
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d93f3f;
+}
+.app {
+  position: relative;
+  min-height: 100svh;
+  transition: --red .7s var(--ease), --accent .7s var(--ease);
+}
+.app.is-jump-cover {
+  transition: none;
+}
 .screen {
   display: flex;
   position: relative;
@@ -422,7 +445,28 @@ button { touch-action: manipulation; }
 }
 .intro__card .eyebrow { justify-content: center; }
 .intro__card h1 { margin: 0 auto 22px; }
-.intro__card .lede { margin: 0 auto 34px; max-width: 26em; }
+.intro__card .lede { margin: 0 auto 22px; max-width: 26em; }
+.intro__field {
+  width: min(100%, 22rem);
+  margin: 0 auto 28px;
+}
+.intro__field input {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid rgb(26 26 26 / 10%);
+  border-radius: var(--r-full);
+  padding: 14px 22px;
+  background: #fff;
+  font-size: 1.2rem;
+  font-weight: 500;
+  text-align: center;
+}
+.intro__field input::placeholder {
+  color: var(--ink-3);
+  font-size: 1.2rem;
+  letter-spacing: .06em;
+}
+.intro__field input:focus-visible { outline-offset: 4px; }
 
 /* ============================================================
    2. Policy
@@ -515,7 +559,7 @@ button { touch-action: manipulation; }
 .radar text { fill: var(--ink-3); font-size: 11px; letter-spacing: .04em; }
 .radar__grid { fill: none; stroke: rgb(26 26 26 / 9%); }
 .radar__axis { stroke: rgb(26 26 26 / 7%); }
-.radar__value { fill: rgb(217 63 63 / 13%); stroke: var(--red); stroke-width: 1.5; }
+.radar__value { fill: color-mix(in srgb, var(--accent) 13%, transparent); stroke: var(--red); stroke-width: 1.5; }
 .radar circle { fill: var(--red); }
 
 .metric-rows { display: grid; gap: 2px; margin: 0; }
@@ -539,11 +583,27 @@ button { touch-action: manipulation; }
    3. Time jump — a single sphere
    ============================================================ */
 .time-jump {
+  --red: #d93f3f;
+  --accent: #d93f3f;
   align-items: center;
   justify-content: center;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  max-width: none;
   padding: 0;
+  pointer-events: none;
+}
+.time-jump__veil {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(168deg, var(--bg) 0%, var(--bg-2) 100%);
 }
 .time-jump__orb {
+  position: relative;
+  z-index: 1;
   display: grid;
   width: min(76vmin, 620px);
   aspect-ratio: 1;
@@ -551,7 +611,7 @@ button { touch-action: manipulation; }
   border: 1px solid rgb(255 255 255 / 55%);
   border-radius: 50%;
   background:
-    radial-gradient(60% 55% at 50% 46%, rgb(217 63 63 / 12%), transparent 70%),
+    radial-gradient(60% 55% at 50% 46%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
     rgb(255 255 255 / 62%);
   box-shadow: 0 30px 80px rgb(24 24 27 / 8%);
   text-align: center;
@@ -561,11 +621,13 @@ button { touch-action: manipulation; }
 .time-jump__orb .eyebrow { justify-content: center; margin-bottom: 10px; }
 .time-jump strong {
   display: block;
-  font-size: clamp(4rem, 17vmin, 9.5rem);
+  font-size: clamp(3.2rem, 13vmin, 7.4rem);
   font-weight: 300;
   line-height: 1;
   letter-spacing: -.01em;
   font-variant-numeric: tabular-nums;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 /* ============================================================
@@ -577,7 +639,10 @@ button { touch-action: manipulation; }
   justify-content: flex-end;
   padding: 0;
 }
-.reveal__stage { flex: 1; padding-top: 3vh; }
+.reveal__stage {
+  flex: 1;
+  padding-top: 3vh;
+}
 .reveal__bar {
   display: grid;
   flex: 0 0 auto;

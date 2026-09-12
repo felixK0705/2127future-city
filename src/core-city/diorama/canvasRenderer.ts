@@ -6,6 +6,7 @@ import {
   depthOf,
   drawBench,
   drawBoat,
+  drawFigure,
   drawBridge,
   drawCloud,
   drawContactShadow,
@@ -473,12 +474,11 @@ export function createCanvasDiorama(options: {
       y: 0,
       thickness: layout.platform.thickness,
       topColor: palette.platformTop,
-      sideColor: mix(palette.platformEdge, '#b99a78', 0.25),
-      underColor: mix(palette.platformUnder, '#9b7653', 0.3),
-      lipColor: mix(palette.foliage, palette.platformTop, 0.18),
-      lipRatio: 0.34,
+      sideColor: palette.platformEdge,
+      underColor: palette.platformUnder,
+      lipColor: mix(palette.accentPrimary, palette.platformTop, 0.55),
+      lipRatio: 0.18,
     });
-    scenery.paintVines(sctx, camera);
 
     // --- 地面（水面・広場・芝生・道路・橋） ---
     const roadColor = shade(palette.road, -0.06);
@@ -558,8 +558,8 @@ export function createCanvasDiorama(options: {
               width: dx !== 0 ? surface.width * 0.1 : surface.width * 0.07,
               depth: dx !== 0 ? surface.depth * 0.07 : surface.depth * 0.1,
               y: 0.0025,
-              color: palette.platformTop,
-              alpha: 0.78,
+              color: palette.glow,
+              alpha: 0.6,
             });
           }
         }
@@ -573,8 +573,9 @@ export function createCanvasDiorama(options: {
             width: ns ? surface.width * 0.03 : surface.width * 0.18,
             depth: ns ? surface.depth * 0.18 : surface.depth * 0.03,
             y: 0.0025,
-            color: palette.platformTop,
-            alpha: 0.62,
+            // 走行帯は光の線として引く（2127 年の誘導路）
+            color: palette.glow,
+            alpha: 0.55,
           });
         }
       }
@@ -605,15 +606,15 @@ export function createCanvasDiorama(options: {
       sctx.globalAlpha = 1;
     }
 
-    // --- 接地影 ---
+    // --- 接地影（やわらかいアンビエントオクルージョンだけ。硬い影は作らない） ---
     for (const block of layout.blocks) {
-      drawContactShadow(sctx, camera, block.x, block.z, Math.max(block.width, block.depth) * 0.85, palette.shadow, 0.24);
+      drawContactShadow(sctx, camera, block.x, block.z, Math.max(block.width, block.depth) * 0.95, palette.shadow, 0.26);
     }
     for (const landmark of layout.landmarks) {
-      drawContactShadow(sctx, camera, landmark.x, landmark.z, landmark.footprint * 0.5, palette.shadow, 0.28);
+      drawContactShadow(sctx, camera, landmark.x, landmark.z, landmark.footprint * 0.56, palette.shadow, 0.28);
     }
     for (const tree of layout.trees) {
-      drawContactShadow(sctx, camera, tree.x, tree.z, tree.size * 1.5, palette.shadow, 0.16);
+      drawContactShadow(sctx, camera, tree.x, tree.z, tree.size * 1.6, palette.shadow, 0.18);
     }
 
     // --- 街（回転後の奥行き順） ---
@@ -834,7 +835,38 @@ export function createCanvasDiorama(options: {
     type Mover =
       | { kind: 'signal'; depth: number; x: number; z: number; signal: DioramaSignal }
       | { kind: 'car'; depth: number; x: number; z: number; car: CarState }
-      | { kind: 'train'; depth: number; x: number; z: number; head: boolean; fade: number };
+      | { kind: 'train'; depth: number; x: number; z: number; head: boolean; fade: number }
+      | {
+          kind: 'walker';
+          depth: number;
+          x: number;
+          z: number;
+          walk: number;
+          alongX: boolean;
+          direction: 1 | -1;
+          size: number;
+          fade: number;
+        };
+
+    const walkers: Mover[] = layout.figures.map((figure) => {
+      const traveled = figure.start + elapsed * figure.speed * figure.direction;
+      const loop = EDGE * 2;
+      let s = ((traveled + EDGE) % loop + loop) % loop - EDGE;
+      const x = figure.axis === 'x' ? s : figure.at;
+      const z = figure.axis === 'z' ? s : figure.at;
+      const walk = ((elapsed * figure.speed * figure.stride) % 1 + 1) % 1;
+      return {
+        kind: 'walker' as const,
+        depth: depthOf(camera, x, z),
+        x,
+        z,
+        walk,
+        alongX: figure.axis === 'x',
+        direction: figure.direction,
+        size: figure.size,
+        fade: clamp((EDGE - Math.abs(s)) / FADE, 0, 1),
+      };
+    });
 
     // 高架軌道のリニア（台座の端で出入りする）
     const maglev = layout.maglev;
@@ -868,6 +900,7 @@ export function createCanvasDiorama(options: {
         return { kind: 'car' as const, depth: depthOf(camera, at.x, at.z), x: at.x, z: at.z, car };
       }),
       ...trainCars,
+      ...walkers,
     ].sort((a, b) => a.depth - b.depth);
 
     for (const mover of movers) {
@@ -875,7 +908,17 @@ export function createCanvasDiorama(options: {
         const { x, z, signal } = mover;
         drawOccluded(mover.depth, screenBox(x, z, 0.03, 0.16), mover, undefined, (target) => {
           drawSignalPost(target, camera, x, z, palette);
-          drawSignalLamp(target, camera, x, z, signalState(signal.axis, elapsed));
+          drawSignalLamp(target, camera, x, z, signalState(signal.axis, elapsed), palette);
+        });
+        continue;
+      }
+      if (mover.kind === 'walker') {
+        const { x, z, walk, alongX, direction, size, fade } = mover;
+        if (fade <= 0) continue;
+        drawOccluded(mover.depth, screenBox(x, z, 0.02, 0.06), mover, undefined, (target) => {
+          withOpacity(fade, () =>
+            drawFigure(target, camera, x, z, palette, { walk, alongX, direction, size }),
+          );
         });
         continue;
       }
