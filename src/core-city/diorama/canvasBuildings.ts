@@ -51,22 +51,9 @@ const FACE_DIRS: readonly (readonly [number, number])[] = [
 ];
 
 function materialColor(block: DioramaBlock, palette: DioramaPalette): string {
-  switch (block.material) {
-    case 'glass':
-      return palette.buildingGlass;
-    case 'mid':
-      return palette.buildingMid;
-    case 'accentPrimary':
-      return palette.accentPrimary;
-    case 'accentSecondary':
-      return palette.accentSecondary;
-    case 'tintPrimary':
-      return mix(palette.accentPrimary, palette.buildingLight, 0.7);
-    case 'tintSecondary':
-      return mix(palette.accentSecondary, palette.buildingLight, 0.66);
-    default:
-      return palette.buildingLight;
-  }
+  // 壁の塗りは白〜浅灰だけ。色味を混ぜると、陰の面だけ彩度が上がって
+  // 回したときに都市の色が変わって見える。
+  return block.material === 'mid' ? palette.buildingMid : palette.buildingLight;
 }
 
 function crownOf(block: DioramaBlock): BlockCrown {
@@ -79,11 +66,11 @@ function facing(camera: IsoCamera, nx: number, nz: number): { front: boolean; to
   const s = Math.sin(camera.rot);
   const wx = nx * c - nz * s;
   const wz = nx * s + nz * c;
-  return { front: wx + wz > 0.0001, tone: clamp((wx - wz) * 0.5 + 0.5, 0, 1) };
+  return { front: wx + wz > -0.28, tone: clamp((wx - wz) * 0.5 + 0.5, 0, 1) };
 }
 
 function sideTone(base: string, tone: number): string {
-  return shade(base, lerp(-0.26, -0.04, tone));
+  return mix('#dce1e7', base, lerp(0.78, 1, tone));
 }
 
 interface Palette2127 {
@@ -99,13 +86,12 @@ interface Palette2127 {
 function tonesOf(block: DioramaBlock, palette: DioramaPalette): Palette2127 {
   return {
     body: materialColor(block, palette),
-    glow: glowColor(palette),
+    glow: mix(palette.glow, '#ffffff', 0.38),
     glass: mix(palette.buildingGlass, '#ffffff', 0.18),
-    darkGlass: mix(palette.buildingGlass, '#22324a', 0.38),
-    frame: mix(palette.buildingLight, '#ffffff', 0.55),
-    // 灯りの入った窓。原色のままだと点が散って見えるので、白を強く混ぜる
-    lit: mix(palette.accentSecondary, '#fffdf2', 0.62),
-    roof: block.roofAccent ? palette.accentSecondary : palette.roof,
+    darkGlass: palette.glassDeep,
+    frame: '#ffffff',
+    lit: mix(palette.accentPrimary, '#ffffff', 0.38),
+    roof: block.roofAccent ? mix(palette.accentSecondary, '#ffffff', 0.72) : palette.roof,
   };
 }
 
@@ -129,14 +115,20 @@ function windowGrid(
   const cellV = (v1 - v0) / Math.max(1, rows);
   const cellU = 0.86 / Math.max(1, cols);
   for (let r = 0; r < rows; r += 1) {
-    const vLow = v0 + cellV * r + cellV * 0.2;
-    const vHigh = v0 + cellV * r + cellV * 0.78;
+    const vLow = v0 + cellV * r + cellV * 0.28;
+    const vHigh = v0 + cellV * r + cellV * 0.72;
     for (let c = 0; c < cols; c += 1) {
-      const uLow = 0.07 + cellU * c + cellU * 0.16;
-      const uHigh = 0.07 + cellU * c + cellU * 0.84;
-      const lit = rng.chance(0.14);
-      if (detailed) faceRect(ctx, face.basis, uLow - 0.006, vLow - 0.006, uHigh + 0.006, vHigh + 0.006, tones.frame, 0.85);
-      faceRect(ctx, face.basis, uLow, vLow, uHigh, vHigh, lit ? tones.lit : tones.glass, lit ? 0.95 : 0.78);
+      const uLow = 0.07 + cellU * c + cellU * 0.22;
+      const uHigh = 0.07 + cellU * c + cellU * 0.78;
+      const lit = rng.chance(0.18);
+      const pane = mix(tones.darkGlass, '#ffffff', 0.62);
+      if (detailed) faceRect(ctx, face.basis, uLow - 0.008, vLow - 0.008, uHigh + 0.008, vHigh + 0.008, tones.frame, 0.9);
+      faceRect(ctx, face.basis, uLow, vLow, uHigh, vHigh, lit ? mix(tones.lit, '#ffffff', 0.4) : pane, lit ? 0.88 : 0.7);
+      if (detailed) {
+        faceRect(ctx, face.basis, uLow, vHigh - (vHigh - vLow) * 0.28, uHigh, vHigh, '#ffffff', lit ? 0.16 : 0.22);
+        faceRect(ctx, face.basis, uLow, vLow, uLow + (uHigh - uLow) * 0.22, vLow + (vHigh - vLow) * 0.42, '#ffffff', 0.18);
+        if (lit) faceRect(ctx, face.basis, uLow + 0.01, vLow + 0.02, uHigh - 0.01, vLow + (vHigh - vLow) * 0.35, tones.glow, 0.28);
+      }
     }
   }
 }
@@ -150,22 +142,30 @@ function ribbonWindows(
   v1: number,
   tones: Palette2127,
   detailed: boolean,
+  seed?: string,
 ): void {
+  const rng = seed ? createRng(seed) : null;
   const cellV = (v1 - v0) / Math.max(1, floors);
+  const mullions = Math.max(3, Math.round(face.width / 0.026));
   for (let r = 0; r < floors; r += 1) {
-    const a = v0 + cellV * r + cellV * 0.26;
-    const b = v0 + cellV * r + cellV * 0.86;
-    faceRect(ctx, face.basis, 0.05, a, 0.95, b, tones.glass, 0.82);
+    const a = v0 + cellV * r + cellV * 0.22;
+    const b = v0 + cellV * r + cellV * 0.88;
+    faceRect(ctx, face.basis, 0.04, a, 0.96, b, mix(tones.darkGlass, '#ffffff', 0.68), 0.48);
     if (detailed) {
-      // 天井際の反射
-      faceRect(ctx, face.basis, 0.05, b - (b - a) * 0.22, 0.95, b, '#ffffff', 0.18);
+      faceRect(ctx, face.basis, 0.04, b - (b - a) * 0.24, 0.96, b, '#ffffff', 0.2);
+      faceRect(ctx, face.basis, 0.04, a, 0.96, a + (b - a) * 0.08, tones.frame, 0.55);
+      for (let i = 0; i < mullions; i += 1) {
+        const u0 = 0.05 + (0.9 / mullions) * i + 0.01;
+        const u1 = 0.05 + (0.9 / mullions) * (i + 1) - 0.01;
+        const lit = rng?.chance(0.16) ?? false;
+        if (lit) faceRect(ctx, face.basis, u0, a + (b - a) * 0.12, u1, b - (b - a) * 0.18, tones.lit, 0.72);
+      }
     }
   }
   if (detailed) {
-    const mullions = Math.max(2, Math.round(face.width / 0.03));
     for (let i = 1; i < mullions; i += 1) {
       const u = 0.05 + (0.9 / mullions) * i;
-      faceRect(ctx, face.basis, u - 0.004, v0, u + 0.004, v1, tones.frame, 0.4);
+      faceRect(ctx, face.basis, u - 0.005, v0, u + 0.005, v1, tones.frame, 0.55);
     }
   }
 }
@@ -177,7 +177,7 @@ function greenWall(ctx: Ctx, face: VisibleFace, palette: DioramaPalette, seed: s
     [0.06, 0.24],
     [0.76, 0.94],
   ] as const) {
-    faceRect(ctx, face.basis, u0, 0.1, u1, 0.96, palette.foliageDeep, 0.92);
+    faceRect(ctx, face.basis, u0, 0.1, u1, 0.96, mix(palette.foliageDeep, '#ffffff', 0.35), 0.55);
     for (let i = 0; i < 7; i += 1) {
       const v = rng.range(0.12, 0.9);
       const u = rng.range(u0, u1 - 0.06);
@@ -205,51 +205,33 @@ function drawFacade(
   const style = styleOf(block);
   const floors = Math.max(1, Math.round(height / 0.036));
   const cols = Math.max(1, Math.round(face.width / 0.022));
-
+  // 四面とも同じ外装。幕壁を一部の面だけに付けると、回した瞬間に
+  // 白い壁とガラスが入れ替わり、都市の色が変わって見える。
   if (block.windows === 'grid' && style !== 'tower') {
-    windowGrid(ctx, face, Math.min(5, cols), Math.min(8, floors), 0.12, 0.92, tones, detailed, `${block.id}-g-${face.index}`);
+    windowGrid(ctx, face, Math.min(6, cols), Math.min(9, floors), 0.12, 0.92, tones, detailed, `${block.id}-g-${face.index}`);
   } else if (style === 'pod') {
-    // 住居ポッド: 角を回り込む 1 本の大きな窓帯と、足元の光
-    faceRect(ctx, face.basis, 0.08, 0.34, 0.92, 0.78, tones.darkGlass, 0.9);
-    faceRect(ctx, face.basis, 0.08, 0.66, 0.92, 0.78, '#ffffff', 0.2);
-    if (detailed) faceRect(ctx, face.basis, 0.05, 0.08, 0.95, 0.12, tones.glow, 0.85);
+    faceRect(ctx, face.basis, 0.08, 0.32, 0.92, 0.82, mix(tones.darkGlass, '#ffffff', 0.55), 0.7);
+    faceRect(ctx, face.basis, 0.08, 0.68, 0.92, 0.82, '#ffffff', 0.22);
+    if (detailed) {
+      faceRect(ctx, face.basis, 0.05, 0.08, 0.95, 0.13, tones.glow, 0.88);
+      faceRect(ctx, face.basis, 0.12, 0.38, 0.34, 0.62, '#ffffff', 0.2);
+      faceRect(ctx, face.basis, 0.48, 0.36, 0.88, 0.78, tones.glass, 0.35);
+    }
   } else if (style === 'studio') {
-    // 低層: 1 階はすべてガラス、その上に光の線、上階は窓帯
-    faceRect(ctx, face.basis, 0.05, 0.07, 0.95, 0.4, tones.darkGlass, 0.86);
-    faceRect(ctx, face.basis, 0.03, 0.42, 0.97, 0.47, tones.glow, 0.9);
-    ribbonWindows(ctx, face, Math.max(1, Math.round(floors * 0.5)), 0.5, 0.94, tones, detailed);
+    faceRect(ctx, face.basis, 0.05, 0.07, 0.95, 0.4, mix(tones.darkGlass, '#ffffff', 0.5), 0.72);
+    faceRect(ctx, face.basis, 0.05, 0.3, 0.95, 0.4, '#ffffff', 0.16);
+    faceRect(ctx, face.basis, 0.03, 0.42, 0.97, 0.47, tones.glow, 0.92);
+    ribbonWindows(ctx, face, Math.max(1, Math.round(floors * 0.5)), 0.5, 0.94, tones, detailed, `${block.id}-rw-${face.index}`);
   } else if (style === 'block') {
-    ribbonWindows(ctx, face, Math.min(8, floors), 0.1, 0.94, tones, detailed);
-    // 数階おきの光の線
+    ribbonWindows(ctx, face, Math.min(9, floors), 0.1, 0.94, tones, detailed, `${block.id}-rw-${face.index}`);
     if (detailed) {
       for (let i = 1; i < 3; i += 1) {
         const v = 0.1 + (0.84 / 3) * i;
-        faceRect(ctx, face.basis, 0, v - 0.008, 1, v + 0.008, tones.glow, 0.7);
+        faceRect(ctx, face.basis, 0, v - 0.007, 1, v + 0.007, tones.glow, 0.78);
       }
     }
   } else {
-    // 高層: ガラスの外装に縦のフィン、数十階おきに光の帯
-    faceRect(ctx, face.basis, 0.04, 0.05, 0.96, 0.95, tones.glass, 0.72);
-    const bands = Math.min(12, Math.max(4, Math.round(floors * 0.7)));
-    for (let i = 0; i < bands; i += 1) {
-      const v = 0.05 + (0.9 / bands) * i;
-      faceRect(ctx, face.basis, 0.04, v, 0.96, v + (0.9 / bands) * 0.16, tones.frame, 0.5);
-    }
-    if (detailed) {
-      const fins = Math.max(3, Math.round(face.width / 0.024));
-      for (let i = 1; i < fins; i += 1) {
-        const u = 0.04 + (0.92 / fins) * i;
-        faceRect(ctx, face.basis, u - 0.006, 0.05, u + 0.006, 0.95, tones.frame, 0.8);
-      }
-      for (const v of [0.34, 0.68]) faceRect(ctx, face.basis, 0, v, 1, v + 0.014, tones.glow, 0.8);
-      // 斜めの映り込み
-      fillPoly(
-        ctx,
-        [onFace(face.basis, 0.16, 0.06), onFace(face.basis, 0.3, 0.06), onFace(face.basis, 0.6, 0.94), onFace(face.basis, 0.46, 0.94)],
-        '#ffffff',
-        0.16,
-      );
-    }
+    windowGrid(ctx, face, Math.min(5, cols), Math.min(8, floors), 0.14, 0.9, tones, detailed, `${block.id}-g-${face.index}`);
   }
 
   if (block.greenWall && detailed && style !== 'pod') greenWall(ctx, face, palette, `${block.id}-gw-${face.index}`);
@@ -295,7 +277,7 @@ function drawSolarRoof(
   const high0 = at(1, -1, y + rise);
 
   fillPoly(ctx, [low0, low1, high1, high0], mix(palette.roof, '#ffffff', 0.12));
-  const panel = mix('#2c4a78', palette.buildingGlass, 0.22);
+  const panel = mix(palette.panel, palette.buildingGlass, 0.18);
   const onSlope = (u: number, v: number): Point2 => ({
     x: low0.x + (low1.x - low0.x) * u + (high0.x - low0.x) * v,
     y: low0.y + (low1.y - low0.y) * u + (high0.y - low0.y) * v,
@@ -412,7 +394,7 @@ function drawCrown(
       break;
     }
     case 'solar': {
-      const panel = mix('#2c4a78', palette.buildingGlass, 0.22);
+      const panel = mix(palette.panel, palette.buildingGlass, 0.18);
       const cols = detailed ? 3 : 1;
       const size = (radius * 1.3) / cols;
       for (let r = 0; r < 2; r += 1) {
@@ -434,7 +416,7 @@ function drawCrown(
     case 'turbine': {
       // 垂直軸の小型風車（ねじれた翼を縦の帯で表す）
       const h = Math.max(0.05, radius * 0.9);
-      drawCylinder(ctx, camera, { x, z, y, radius: radius * 0.06, height: h * 0.25, color: shade(palette.buildingMid, -0.25) });
+      drawCylinder(ctx, camera, { x, z, y, radius: radius * 0.06, height: h * 0.25, color: shade(palette.buildingMid, -0.1) });
       const rotor = drawCylinder(ctx, camera, {
         x,
         z,
@@ -465,7 +447,7 @@ function drawCrown(
     case 'pad': {
       // 離着陸パッド: 暗い円盤に光の輪と誘導灯
       const r = radius * 0.82;
-      fillDisc(ctx, camera, x, y + 0.004, z, r, shade(palette.buildingMid, -0.32));
+      fillDisc(ctx, camera, x, y + 0.004, z, r, shade(palette.buildingMid, -0.12));
       strokeRing(ctx, camera, x, y + 0.005, z, r * 0.78, tones.glow, Math.max(1, camera.span * 0.004), 0.95);
       fillDisc(ctx, camera, x, y + 0.006, z, r * 0.2, palette.accentSecondary, 0.9);
       if (detailed) {
@@ -488,7 +470,7 @@ function drawCrown(
           { x: base.x + 0.5, y: base.y - mast },
           { x: base.x - 0.5, y: base.y - mast },
         ],
-        shade(palette.buildingMid, -0.4),
+        shade(palette.buildingMid, -0.16),
       );
       drawGlow(ctx, base.x, base.y - mast, camera.span * 0.02, palette.accentPrimary, 0.7);
       fillCircle(ctx, base.x, base.y - mast, Math.max(1.4, camera.span * 0.004), palette.accentPrimary);
@@ -499,17 +481,17 @@ function drawCrown(
       break;
     }
     case 'scanner': {
-      // 監視の目: 小さなドームと、赤い光点
+      // 監視の目: 小さなガラスのドームと、沈めたアクセントの光点
       const base = toScreen(camera, x, y, z);
       const r = radius * camera.span * 0.3;
-      ctx.fillStyle = shade(palette.buildingMid, -0.15);
+      ctx.fillStyle = shade(palette.buildingMid, -0.08);
       ctx.beginPath();
       ctx.moveTo(base.x - r, base.y);
       ctx.bezierCurveTo(base.x - r, base.y - r * 1.2, base.x + r, base.y - r * 1.2, base.x + r, base.y);
       ctx.closePath();
       ctx.fill();
-      drawGlow(ctx, base.x + r * 0.2, base.y - r * 0.5, r * 1.4, '#ff4f5e', 0.55);
-      fillCircle(ctx, base.x + r * 0.2, base.y - r * 0.5, Math.max(1.2, r * 0.22), '#ff4f5e');
+      drawGlow(ctx, base.x + r * 0.2, base.y - r * 0.5, r * 1.4, palette.alert, 0.5);
+      fillCircle(ctx, base.x + r * 0.2, base.y - r * 0.5, Math.max(1.2, r * 0.22), palette.alert);
       break;
     }
     default:
@@ -541,7 +523,8 @@ function drawRoundBuilding(
   for (let i = 0; i < floors; i += 1) {
     const y0 = h * 0.08 + ((h * 0.86) / floors) * i + ((h * 0.86) / floors) * 0.24;
     const y1 = h * 0.08 + ((h * 0.86) / floors) * (i + 1) - ((h * 0.86) / floors) * 0.12;
-    cylinderBand(ctx, camera, { x, z, radius: r, y0, y1, color: tones.glass, alpha: 0.8 });
+    cylinderBand(ctx, camera, { x, z, radius: r, y0, y1, color: tones.darkGlass, alpha: 0.86 });
+    if (detailed) cylinderBand(ctx, camera, { x, z, radius: r * 0.98, y0: y0 + (y1 - y0) * 0.35, y1: y0 + (y1 - y0) * 0.55, color: mix(palette.accentPrimary, '#ffffff', 0.4), alpha: 0.28 });
   }
   if (block.greenWall) {
     for (let i = 0; i < floors; i += 3) {

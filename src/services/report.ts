@@ -1,8 +1,8 @@
 import { POLICY_CATEGORIES, findPolicy } from '../data/policies'
 import { CATEGORY_KEYS, METRIC_KEYS, type Choices, type Scores } from '../types'
-import { METRIC_LABELS } from '../data/copy'
+import { METRIC_LABELS, REPORT_COPY } from '../data/copy'
 import { scoreArchetype } from '../lib/archetypeScoring'
-import { getArchetype } from '../core-city'
+import { accentForArchetype, getArchetype } from '../core-city'
 import { deriveCitizenNumber, formatIssueDate } from '../lib/citizenCard'
 
 export { deriveCitizenNumber } from '../lib/citizenCard'
@@ -30,19 +30,19 @@ const SNAPSHOT_HEIGHT = 608
 const RIGHT_X = MARGIN + LEFT_WIDTH + 46
 const RIGHT_WIDTH = PAGE_WIDTH - RIGHT_X - MARGIN
 
-const FONT_STACK = '"Noto Sans JP", "Yu Gothic", sans-serif'
+const FONT_FAMILY = 'Noto Sans JP, Yu Gothic, sans-serif'
 const INK = '#1a1a1a'
 const INK_MUTED = '#8d8f93'
-const RED = '#d93f3f'
 const PANEL = '#141415'
 
 /** canvas cannot trigger a font download, so make sure the faces are resident */
 const ensureFonts = async () => {
   try {
     await Promise.all([
-      document.fonts.load(`400 26px ${FONT_STACK}`),
-      document.fonts.load(`500 38px ${FONT_STACK}`),
-      document.fonts.load(`700 76px ${FONT_STACK}`),
+      document.fonts.load('400 26px "Noto Sans JP"'),
+      document.fonts.load('500 30px "Noto Sans JP"'),
+      document.fonts.load('500 38px "Noto Sans JP"'),
+      document.fonts.load('700 76px "Noto Sans JP"'),
     ])
     await document.fonts.ready
   } catch {
@@ -108,12 +108,12 @@ const wrapText = (
 const loadSnapshot = (source: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
     if (!source) {
-      reject(new Error('ジオラマ画像が見つかりません。'))
+      reject(new Error(REPORT_COPY.missingSnapshot))
       return
     }
     const image = new Image()
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('ジオラマ画像を読み込めませんでした。'))
+    image.onerror = () => reject(new Error(REPORT_COPY.badSnapshot))
     image.src = source
   })
 
@@ -148,7 +148,7 @@ const tradeoffLine = (scores: Scores): string => {
   )
   const strongest = ranked[0] ?? METRIC_KEYS[0]
   const weakest = ranked[ranked.length - 1] ?? METRIC_KEYS[0]
-  return `${METRIC_LABELS[strongest]}を伸ばす代わりに、${METRIC_LABELS[weakest]}をどう守るかが問われる都市です。`
+  return REPORT_COPY.tradeoff(METRIC_LABELS[strongest], METRIC_LABELS[weakest])
 }
 
 export const createReportImage = async (data: SouvenirData): Promise<Blob> => {
@@ -163,10 +163,11 @@ export const createReportImage = async (data: SouvenirData): Promise<Blob> => {
     canvas.width = PAGE_WIDTH
     canvas.height = PAGE_HEIGHT
     const context = canvas.getContext('2d')
-    if (!context) throw new Error('記念品画像を作成できませんでした。')
+    if (!context) throw new Error(REPORT_COPY.noContext)
 
     const visitDate = data.visitDate ?? new Date()
     const citizenNumber = deriveCitizenNumber(data.cityName, archetypeId)
+    const accent = accentForArchetype(archetypeId).primary
 
     // 下地
     const sheet = context.createLinearGradient(0, 0, PAGE_WIDTH, PAGE_HEIGHT)
@@ -200,20 +201,20 @@ export const createReportImage = async (data: SouvenirData): Promise<Blob> => {
     const plateX = MARGIN + 60
     const plateTop = CARD_TOP + SNAPSHOT_HEIGHT
     context.fillStyle = '#c9c9ce'
-    context.font = `400 26px ${FONT_STACK}`
-    context.fillText('2127年発行　未来都市来訪記念', plateX, plateTop + 76)
+    context.font = `400 26px ${FONT_FAMILY}`
+    context.fillText(REPORT_COPY.plate, plateX, plateTop + 76)
     context.fillStyle = '#f4f4f5'
-    context.font = `700 76px ${FONT_STACK}`
-    const nameBottom = wrapText(context, data.cityName || '名もなき未来都市', plateX, plateTop + 170, 780, 90, 2)
-    context.fillStyle = RED
-    context.font = `500 30px ${FONT_STACK}`
+    context.font = `700 76px ${FONT_FAMILY}`
+    const nameBottom = wrapText(context, data.cityName || REPORT_COPY.unnamedCity, plateX, plateTop + 170, 780, 90, 2)
+    context.fillStyle = accent
+    context.font = `500 30px ${FONT_FAMILY}`
     context.fillText(typeTitle, plateX, nameBottom + 22)
     context.fillStyle = '#9a9aa0'
-    context.font = `400 25px ${FONT_STACK}`
-    const dateLabel = `来訪日　${formatIssueDate(visitDate)}`
+    context.font = `400 25px ${FONT_FAMILY}`
+    const dateLabel = `${REPORT_COPY.visit}　${formatIssueDate(visitDate)}`
     const footY = CARD_TOP + CARD_HEIGHT - 84
     context.fillText(dateLabel, plateX, footY)
-    context.fillText(`市民番号　${citizenNumber}`, plateX + context.measureText(dateLabel).width + 70, footY)
+    context.fillText(`${REPORT_COPY.citizen}　${citizenNumber}`, plateX + context.measureText(dateLabel).width + 70, footY)
     context.restore()
 
     // 右：指標と政策
@@ -230,11 +231,11 @@ export const createReportImage = async (data: SouvenirData): Promise<Blob> => {
     const left = RIGHT_X + 64
     const right = RIGHT_X + RIGHT_WIDTH - 64
     context.fillStyle = INK
-    context.font = `500 38px ${FONT_STACK}`
-    context.fillText('この都市の五つの指標', left, 140)
+    context.font = `500 38px ${FONT_FAMILY}`
+    context.fillText(REPORT_COPY.metrics, left, 140)
     context.textAlign = 'right'
     context.fillStyle = INK_MUTED
-    context.font = `500 21px ${FONT_STACK}`
+    context.font = `500 21px ${FONT_FAMILY}`
     setTracking(context, '5px')
     context.fillText('2127 CITIZEN PASS', right, 136)
     setTracking(context, '0px')
@@ -247,19 +248,19 @@ export const createReportImage = async (data: SouvenirData): Promise<Blob> => {
       const y = 205 + index * 60
       const score = Math.max(0, Math.min(100, data.scores[metric]))
       context.fillStyle = INK
-      context.font = `400 26px ${FONT_STACK}`
+      context.font = `400 26px ${FONT_FAMILY}`
       context.fillText(METRIC_LABELS[metric], left, y)
       context.fillStyle = '#e2e2e4'
       roundRectPath(context, barLeft, y - 8, barWidth, 16, 8)
       context.fill()
       if (score > 0) {
-        context.fillStyle = RED
+        context.fillStyle = accent
         roundRectPath(context, barLeft, y - 8, Math.max(16, barWidth * (score / 100)), 16, 8)
         context.fill()
       }
       context.textAlign = 'right'
       context.fillStyle = INK
-      context.font = `500 28px ${FONT_STACK}`
+      context.font = `500 28px ${FONT_FAMILY}`
       context.fillText(String(score), right, y)
       context.textAlign = 'left'
     })
@@ -269,27 +270,27 @@ export const createReportImage = async (data: SouvenirData): Promise<Blob> => {
 
     context.textBaseline = 'alphabetic'
     context.fillStyle = INK
-    context.font = `500 38px ${FONT_STACK}`
-    context.fillText('選んだ五つの政策', left, 590)
+    context.font = `500 38px ${FONT_FAMILY}`
+    context.fillText(REPORT_COPY.policies, left, 590)
 
     context.textBaseline = 'middle'
     POLICY_CATEGORIES.forEach((category, index) => {
       const policy = findPolicy(category.id, data.choices[category.id] ?? '')
       const y = 660 + index * 60
       context.fillStyle = INK_MUTED
-      context.font = `400 24px ${FONT_STACK}`
+      context.font = `400 24px ${FONT_FAMILY}`
       context.fillText(category.label, left, y)
       context.fillStyle = INK
-      context.font = `500 30px ${FONT_STACK}`
-      wrapText(context, policy?.title ?? '未選択', left + 210, y, right - left - 210, 36, 1)
+      context.font = `500 30px ${FONT_FAMILY}`
+      wrapText(context, policy?.title ?? REPORT_COPY.unselected, left + 210, y, right - left - 210, 36, 1)
     })
 
     // 締めの一文は赤い縦線を添えて
     const quoteY = CARD_TOP + CARD_HEIGHT - 106
-    context.fillStyle = RED
+    context.fillStyle = accent
     context.fillRect(left, quoteY - 30, 6, 60)
     context.fillStyle = '#4a4a4e'
-    context.font = `400 26px ${FONT_STACK}`
+    context.font = `400 26px ${FONT_FAMILY}`
     wrapText(context, tradeoffLine(data.scores), left + 34, quoteY, right - left - 34, 38, 2)
     context.restore()
 
@@ -298,13 +299,13 @@ export const createReportImage = async (data: SouvenirData): Promise<Blob> => {
         (blob) =>
           blob
             ? resolve(blob)
-            : reject(new Error('記念品画像の書き出しに失敗しました。')),
+            : reject(new Error(REPORT_COPY.writeFailed)),
         'image/png',
       )
     })
   } catch (error) {
     if (error instanceof Error && /[ぁ-んァ-ン一-龯]/u.test(error.message)) throw error
-    throw new Error('記念品画像の作成に失敗しました。もう一度お試しください。')
+    throw new Error(REPORT_COPY.createFailed)
   }
 }
 
@@ -314,11 +315,11 @@ export const downloadReport = async (data: SouvenirData): Promise<void> => {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `${data.cityName || '2127未来都市'}-来訪記念.png`
+    anchor.download = REPORT_COPY.filename(data.cityName)
     anchor.click()
     window.setTimeout(() => URL.revokeObjectURL(url), 0)
   } catch {
-    throw new Error('記念品をダウンロードできませんでした。もう一度お試しください。')
+    throw new Error(REPORT_COPY.downloadFailed)
   }
 }
 

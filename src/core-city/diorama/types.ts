@@ -13,9 +13,11 @@
 /**
  * ジオラマの配色。
  *
- * 基調は白〜ライトグレー〜ソフトなガラス青。
- * 彩度の高い色は accentPrimary / accentSecondary だけに割り当て、
- * 目印になる建造物と小物にのみ使う（面積で使わない）。
+ * 基調は白。彩度のある色は都市ごとのアクセント 1 系統だけ。
+ * ガラス幕壁・示意樹・小人・全息パネルに乗せ、面積の 2〜3 割まで。
+ *
+ * 茶色・濃紺・原色の赤緑は使わない。必要な機能色（警告灯・信号）も
+ * すべてこの型の中で淡く定義し、描画側にハードコードしない。
  */
 export interface DioramaPalette {
   /** 台座の上面 */
@@ -28,7 +30,7 @@ export interface DioramaPalette {
   readonly buildingLight: string;
   /** 建物の副色（ややトーンを落としたニュートラル） */
   readonly buildingMid: string;
-  /** ガラス面のソフトブルー */
+  /** ガラス幕壁（アクセントを透かした色） */
   readonly buildingGlass: string;
   /** 屋根 */
   readonly roof: string;
@@ -36,9 +38,9 @@ export interface DioramaPalette {
   readonly accentPrimary: string;
   /** 副アクセント（小物・屋根のワンポイント） */
   readonly accentSecondary: string;
-  /** 樹冠 */
+  /** 示意樹の葉（アクセント） */
   readonly foliage: string;
-  /** 樹冠の陰側 */
+  /** 示意樹の葉の陰側 */
   readonly foliageDeep: string;
   /** 道路・舗装 */
   readonly road: string;
@@ -48,6 +50,20 @@ export interface DioramaPalette {
   readonly shadow: string;
   /** 浮遊する雲・粒子 */
   readonly cloud: string;
+  /** 奥まったガラス（窓の内側・乗り物の風防）。濃紺の代わりに使う */
+  readonly glassDeep: string;
+  /** 太陽光パネル・機器のマット面 */
+  readonly panel: string;
+  /** 発光（光の導管・浮上光・ライトストリップ） */
+  readonly glow: string;
+  /** 浮島の土（茶色は使わない） */
+  readonly soil: string;
+  /** 浮島の岩・遠景の岩 */
+  readonly rock: string;
+  /** 樹の幹・支柱 */
+  readonly bark: string;
+  /** 機能色（監視灯・停止信号）。淡く、面積を取らない */
+  readonly alert: string;
 }
 
 /**
@@ -217,6 +233,20 @@ export interface DioramaTree {
 }
 
 export type PropKind = 'car' | 'bus' | 'bench' | 'lamp' | 'boat';
+
+/** 歩道を歩く人。位置は毎フレーム、軸に沿って進める。 */
+export interface DioramaFigure {
+  readonly id: string;
+  readonly axis: 'x' | 'z';
+  /** 進行軸と直交する座標（歩道の中心線） */
+  readonly at: number;
+  readonly start: number;
+  readonly direction: 1 | -1;
+  readonly speed: number;
+  /** 歩幅。大きいほど足の振りが速い */
+  readonly stride: number;
+  readonly size: number;
+}
 
 export interface DioramaProp {
   readonly id: string;
@@ -415,6 +445,7 @@ export interface DioramaLayout {
   readonly blocks: readonly DioramaBlock[];
   readonly landmarks: readonly PlacedDioramaLandmark[];
   readonly trees: readonly DioramaTree[];
+  readonly figures: readonly DioramaFigure[];
   readonly props: readonly DioramaProp[];
   readonly clouds: readonly DioramaCloud[];
   readonly sparkles: readonly DioramaSparkle[];

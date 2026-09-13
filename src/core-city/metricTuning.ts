@@ -39,8 +39,8 @@ export function tuneDioramaWithScores(
 
   return {
     ...config,
-    greenery: clamp((config.greenery ?? 0.5) + (environment - 0.5) * 0.5, 0, 1),
-    density: clamp((config.density ?? 0.62) + (convenience - 0.5) * 0.18, 0, 1),
+    greenery: clamp((config.greenery ?? 0.5) + (environment - 0.5) * 0.62, 0, 1),
+    density: clamp((config.density ?? 0.62) + (convenience - 0.5) * 0.26, 0, 1),
     trafficScale: 0.55 + convenience * 0.9,
     signageScale: 0.45 + diversity * 1.1,
     roofVariation: diversity,

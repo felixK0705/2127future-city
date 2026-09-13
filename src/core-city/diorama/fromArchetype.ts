@@ -1,20 +1,19 @@
-﻿import { mix, shade } from '../color';
-import type { Archetype, TimeOfDay } from '../types';
+﻿import type { Archetype, TimeOfDay } from '../types';
+import { accentForArchetype, premiumPalette, studioBackground } from './accent';
 import type {
   DioramaConfig,
   DioramaLandmarkConfig,
   DioramaLandmarkKind,
   DioramaMood,
-  DioramaPalette,
   DioramaTraits,
 } from './types';
 
 /**
  * 16 アーキタイプ → ジオラマ設定への変換。
  *
- * アーキタイプ側の配色は暗い夜景を前提にしているため、そのままでは使わない。
- * **明るいジオラマの規則（白〜ライトグレー基調＋アクセント 2 色）へ翻訳する**のがここの役割で、
- * 色相と気配だけを引き継ぎ、明度は常に明るい側へ寄せる。
+ * アーキタイプ側の配色は暗い夜景を前提にしているため、**一切使わない**。
+ * ジオラマは常に「白い建築可視化」で、
+ * 色は accent.ts が都市ごとに 1 系統だけ与える（→ premiumPalette）。
  *
  * 街の「つくり」は 4 つの選択の傾き（traits）から決める。
  * 目印も傾きから選ぶので、同じ選択の組み合わせは必ず同じ目印の組み合わせになり、
@@ -22,7 +21,7 @@ import type {
  */
 
 /** 傾きの強さ。どの街も「はっきりそちら側」に見えるよう、大きめに振る。 */
-const LEAN = 0.85;
+const LEAN = 1;
 
 /** 時刻 → ムード。暗さではなく色味の傾きとして扱う。 */
 const MOOD_BY_TIME: Record<TimeOfDay, DioramaMood> = {
@@ -32,16 +31,6 @@ const MOOD_BY_TIME: Record<TimeOfDay, DioramaMood> = {
   overcast: 'cool',
   night: 'cool',
 };
-
-/** 明度を確保しつつ色相を残す。 */
-function lighten(color: string, amount: number): string {
-  return mix(color, '#ffffff', amount);
-}
-
-/** アクセントは彩度を保ちたいので、明るすぎる場合だけ少し沈める。 */
-function accentOf(color: string): string {
-  return shade(color, -0.08);
-}
 
 /**
  * アーキタイプの内部 ID（4 文字の極コード）から傾きを取り出す。
@@ -55,28 +44,6 @@ export function archetypeTraits(archetype: Archetype): DioramaTraits {
     governance: lean(1, 'F'),
     growth: lean(2, 'E'),
     power: lean(3, 'C'),
-  };
-}
-
-function buildPalette(archetype: Archetype): DioramaPalette {
-  const source = archetype.visual.palette;
-  return {
-    platformTop: lighten(source.fog, 0.88),
-    platformEdge: lighten(source.fog, 0.72),
-    platformUnder: lighten(source.fog, 0.52),
-    buildingLight: lighten(source.fog, 0.95),
-    buildingMid: lighten(source.mid, 0.82),
-    // ガラスはわずかに青緑へ寄せ、2127 年の外装らしい冷たい光沢にする
-    buildingGlass: mix(lighten(source.accent, 0.68), '#bfe8ff', 0.35),
-    roof: lighten(source.near, 0.74),
-    accentPrimary: accentOf(source.accent),
-    accentSecondary: accentOf(source.glow),
-    foliage: lighten(source.foliage, 0.08),
-    foliageDeep: shade(source.foliage, -0.22),
-    road: lighten(source.fog, 0.76),
-    water: lighten(source.sun, 0.5),
-    shadow: shade(source.fog, -0.35),
-    cloud: '#ffffff',
   };
 }
 
@@ -104,31 +71,36 @@ function buildLandmarks(archetype: Archetype, traits: DioramaTraits): DioramaLan
     list.push({ id: `${archetype.id}-lm${list.length}`, kind, lot, scale, accent });
   };
 
-  if (central) add('aiCore', [4, 4], expanding ? 1.1 : 0.92, 'primary');
+  if (central) add('aiCore', [4, 4], expanding ? 1.22 : 1.0, 'primary');
 
   if (expanding) {
-    add('skyTether', central ? [7, 1] : [4, 4], central ? 0.86 : 1.05, central ? 'secondary' : 'primary');
+    add('skyTether', central ? [7, 1] : [4, 4], central ? 0.98 : 1.18, central ? 'secondary' : 'primary');
   } else {
-    add('arcology', central ? [1, 7] : [4, 4], central ? 0.82 : 1.0, central ? 'secondary' : 'primary');
+    add('arcology', central ? [1, 7] : [4, 4], central ? 0.9 : 1.12, central ? 'secondary' : 'primary');
   }
 
-  if (open) add('vertiport', central ? [7, 7] : [1, 1], 0.85, 'secondary');
+  if (open) {
+    add('vertiport', central ? [7, 7] : [1, 1], expanding ? 1.05 : 0.88, 'secondary');
+    if (expanding) add('vertiport', [1, 7], 0.78, 'none');
+  }
 
   if (!central) {
-    // 分散: 地区ごとに電源を持つ
-    add('solarTree', [2, 6], 1, 'secondary');
-    add('solarTree', [6, 2], 1, 'secondary');
-    add('solarTree', [7, 6], 0.9, 'secondary');
+    add('solarTree', [2, 6], 1.08, 'secondary');
+    add('solarTree', [6, 2], 1.08, 'secondary');
+    add('solarTree', [7, 6], 0.98, 'secondary');
+    if (!expanding) add('solarTree', [1, 3], 0.86, 'none');
   }
 
   if (!expanding) {
-    add('windTurbine', [8, 2], 1, 'none');
-    add('windTurbine', [0, 5], 0.92, 'none');
+    add('windTurbine', [8, 2], 1.08, 'none');
+    add('windTurbine', [0, 5], 1.0, 'none');
+    if (open) add('windTurbine', [8, 7], 0.86, 'none');
   }
 
   if (managed) {
-    add('watchPylon', [3, 1], 1, 'primary');
-    add('watchPylon', [5, 7], 1, 'primary');
+    add('watchPylon', [3, 1], 1.1, 'primary');
+    add('watchPylon', [5, 7], 1.1, 'primary');
+    if (!open) add('watchPylon', [8, 4], 0.92, 'secondary');
   }
 
   return list;
@@ -141,17 +113,18 @@ function buildLandmarks(archetype: Archetype, traits: DioramaTraits): DioramaLan
 export function archetypeToDiorama(archetype: Archetype): DioramaConfig {
   const { skyline, lighting, weather } = archetype.visual;
   const traits = archetypeTraits(archetype);
+  const cityAccent = accentForArchetype(archetype.id);
 
   return {
     id: `archetype-${archetype.id}`,
-    // 背景は空の色を大きく持ち上げた、明るい単色フィールド
-    background: lighten(archetype.visual.palette.skyMid, 0.74),
-    palette: buildPalette(archetype),
+    // 背景はスタジオのホリゾント（白〜ライトグレー）。空の演出はしない
+    background: studioBackground(cityAccent),
+    palette: premiumPalette(cityAccent),
     mood: MOOD_BY_TIME[lighting.timeOfDay],
     landmarks: buildLandmarks(archetype, traits),
-    density: 0.42 + skyline.density * 0.36,
-    // 持続の街は緑が多く、拡張の街は少ない
-    greenery: Math.min(0.95, Math.max(0.15, 0.25 + skyline.greenery * 0.5 - traits.growth * 0.18)),
+    // 密度と緑量は結果ごとの差が一目でわかるまで振り幅を取る
+    density: Math.min(0.96, Math.max(0.16, 0.24 + skyline.density * 0.52 + traits.growth * 0.18)),
+    greenery: Math.min(0.92, Math.max(0.04, 0.08 + skyline.greenery * 0.74 - traits.growth * 0.38 + (traits.openness > 0 ? 0.04 : -0.02))),
     props: true,
     clouds: true,
     // 粒子の多い気象のときだけ、控えめにきらめきを足す

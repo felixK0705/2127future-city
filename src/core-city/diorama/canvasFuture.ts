@@ -27,8 +27,8 @@ import type { DioramaPalette, PlacedDioramaLandmark } from './types';
  */
 
 function accentOf(lm: PlacedDioramaLandmark, p: DioramaPalette): string {
-  if (lm.accent === 'primary') return p.accentPrimary;
-  if (lm.accent === 'secondary') return p.accentSecondary;
+  if (lm.accent === 'primary') return mix(p.accentPrimary, p.buildingLight, 0.86);
+  if (lm.accent === 'secondary') return mix(p.accentSecondary, p.buildingLight, 0.82);
   return p.buildingMid;
 }
 
@@ -274,14 +274,16 @@ export function windTurbineBase(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLandm
   const hub = turbineHub(lm);
   const top = toScreen(cam, lm.x, hub.y, lm.z);
   const k = cam.span / 420;
-  fillDisc(ctx, cam, lm.x, 0.002, lm.z, lm.footprint * 0.4, shade(p.platformTop, -0.08));
+  const glow = glowColor(p);
+  fillDisc(ctx, cam, lm.x, 0.002, lm.z, lm.footprint * 0.42, shade(p.platformTop, -0.06));
+  strokeRing(ctx, cam, lm.x, 0.003, lm.z, lm.footprint * 0.28, glow, Math.max(0.8, cam.span * 0.0025), 0.55);
   fillPoly(
     ctx,
     [
-      { x: base.x - 3.4 * k, y: base.y },
-      { x: base.x + 3.4 * k, y: base.y },
-      { x: top.x + 1.4 * k, y: top.y },
-      { x: top.x - 1.4 * k, y: top.y },
+      { x: base.x - 3.6 * k, y: base.y },
+      { x: base.x + 3.6 * k, y: base.y },
+      { x: top.x + 1.25 * k, y: top.y },
+      { x: top.x - 1.25 * k, y: top.y },
     ],
     p.buildingLight,
   );
@@ -289,21 +291,46 @@ export function windTurbineBase(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLandm
     ctx,
     [
       { x: base.x, y: base.y },
-      { x: base.x + 3.4 * k, y: base.y },
-      { x: top.x + 1.4 * k, y: top.y },
+      { x: base.x + 3.6 * k, y: base.y },
+      { x: top.x + 1.25 * k, y: top.y },
       { x: top.x, y: top.y },
     ],
-    shade(p.buildingLight, -0.14),
+    shade(p.buildingLight, -0.12),
   );
-  // ナセル
+  // 塔身のリング
+  for (const t of [0.28, 0.52, 0.74]) {
+    const y = toScreen(cam, lm.x, hub.y * t, lm.z);
+    const w = (3.6 - t * 2.1) * k;
+    fillPoly(
+      ctx,
+      [
+        { x: y.x - w, y: y.y - 0.8 },
+        { x: y.x + w, y: y.y - 0.8 },
+        { x: y.x + w, y: y.y + 0.8 },
+        { x: y.x - w, y: y.y + 0.8 },
+      ],
+      mix(p.buildingMid, glow, 0.35),
+      0.85,
+    );
+  }
+  // ナセル（本体＋ノーズコーン）
   drawBox(ctx, cam, {
     x: lm.x,
-    z: lm.z + lm.footprint * 0.02,
-    y: hub.y - 0.012,
-    width: 0.028,
-    depth: lm.footprint * 0.22,
-    height: 0.024,
+    z: lm.z + lm.footprint * 0.04,
+    y: hub.y - 0.014,
+    width: 0.03,
+    depth: lm.footprint * 0.26,
+    height: 0.028,
     color: p.buildingLight,
+    topColor: mix(p.buildingLight, '#ffffff', 0.35),
+  });
+  drawCylinder(ctx, cam, {
+    x: lm.x,
+    z: lm.z + lm.footprint * 0.16,
+    y: hub.y - 0.01,
+    radius: 0.012,
+    height: 0.02,
+    color: mix(p.buildingLight, p.buildingGlass, 0.25),
   });
 }
 
@@ -314,7 +341,7 @@ export function windTurbineSpinner(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLa
   const up = toScreen(cam, h.x, h.y + 1, h.z);
   const axisX = { x: alongX.x - hub.x, y: alongX.y - hub.y };
   const axisUp = { x: up.x - hub.x, y: up.y - hub.y };
-  const length = lm.height * 0.36;
+  const length = lm.height * 0.44;
 
   if (nearlyEdgeOn(axisX, axisUp)) {
     const len = Math.hypot(axisUp.x, axisUp.y) || 1;
@@ -322,12 +349,12 @@ export function windTurbineSpinner(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLa
     fillPoly(
       ctx,
       [
-        { x: hub.x - 0.8, y: hub.y - reach },
-        { x: hub.x + 0.8, y: hub.y - reach },
-        { x: hub.x + 0.8, y: hub.y + reach },
-        { x: hub.x - 0.8, y: hub.y + reach },
+        { x: hub.x - 0.9, y: hub.y - reach },
+        { x: hub.x + 0.9, y: hub.y - reach },
+        { x: hub.x + 0.9, y: hub.y + reach },
+        { x: hub.x - 0.9, y: hub.y + reach },
       ],
-      p.buildingLight,
+      mix(p.buildingLight, '#ffffff', 0.25),
     );
     return;
   }
@@ -338,30 +365,46 @@ export function windTurbineSpinner(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLa
   for (let i = 0; i < 3; i += 1) {
     ctx.save();
     ctx.rotate((i / 3) * Math.PI * 2);
+    // 翼根 → 翼弦が広がって先端で細くなる翼型
     fillPoly(
       ctx,
       [
-        { x: 0, y: -length * 0.05 },
-        { x: length * 0.3, y: -length * 0.075 },
-        { x: length, y: -length * 0.012 },
-        { x: length, y: length * 0.008 },
-        { x: 0, y: length * 0.04 },
+        { x: 0, y: -length * 0.04 },
+        { x: length * 0.18, y: -length * 0.09 },
+        { x: length * 0.62, y: -length * 0.055 },
+        { x: length, y: -length * 0.01 },
+        { x: length, y: length * 0.006 },
+        { x: length * 0.62, y: length * 0.028 },
+        { x: length * 0.18, y: length * 0.05 },
+        { x: 0, y: length * 0.035 },
       ],
-      mix(p.buildingLight, '#ffffff', 0.4),
+      mix(p.buildingLight, '#ffffff', 0.45),
     );
     fillPoly(
       ctx,
       [
-        { x: length * 0.84, y: -length * 0.018 },
-        { x: length, y: -length * 0.012 },
-        { x: length, y: length * 0.008 },
-        { x: length * 0.84, y: length * 0.01 },
+        { x: length * 0.18, y: -length * 0.09 },
+        { x: length * 0.62, y: -length * 0.055 },
+        { x: length * 0.62, y: -length * 0.012 },
+        { x: length * 0.18, y: -length * 0.018 },
+      ],
+      '#ffffff',
+      0.28,
+    );
+    fillPoly(
+      ctx,
+      [
+        { x: length * 0.86, y: -length * 0.016 },
+        { x: length, y: -length * 0.01 },
+        { x: length, y: length * 0.006 },
+        { x: length * 0.86, y: length * 0.008 },
       ],
       p.accentPrimary,
     );
     ctx.restore();
   }
-  fillCircle(ctx, 0, 0, length * 0.07, p.buildingLight);
+  fillCircle(ctx, 0, 0, length * 0.085, p.buildingLight);
+  fillCircle(ctx, 0, 0, length * 0.042, mix(p.buildingGlass, '#ffffff', 0.35));
   ctx.restore();
 }
 
@@ -372,7 +415,7 @@ export function windTurbineSpinner(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLa
 export function solarTreeBase(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLandmark, p: DioramaPalette): void {
   const glow = glowColor(p);
   const h = lm.height;
-  const panel = mix('#2c4a78', p.buildingGlass, 0.25);
+  const panel = mix(p.panel, p.buildingGlass, 0.25);
   strokeRing(ctx, cam, lm.x, 0.003, lm.z, lm.footprint * 0.46, glow, Math.max(1, cam.span * 0.003), 0.8);
   fillDisc(ctx, cam, lm.x, 0.002, lm.z, lm.footprint * 0.42, glow, 0.14);
   drawCylinder(ctx, cam, { x: lm.x, z: lm.z, y: 0, radius: lm.footprint * 0.05, height: h * 0.86, color: p.buildingLight });
@@ -425,7 +468,7 @@ export function vertiportBase(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLandmar
   drawCylinder(ctx, cam, { x: lm.x, z: lm.z, y: 0, radius: r * 0.55, height: deckY, color: p.buildingLight });
   cylinderBand(ctx, cam, { x: lm.x, z: lm.z, radius: r * 0.55, y0: deckY * 0.2, y1: deckY * 0.8, color: mix(p.buildingGlass, '#ffffff', 0.12), alpha: 0.85 });
   // 張り出した甲板
-  drawCylinder(ctx, cam, { x: lm.x, z: lm.z, y: deckY, radius: r, height: 0.022, color: p.buildingLight, topColor: shade(p.buildingMid, -0.3) });
+  drawCylinder(ctx, cam, { x: lm.x, z: lm.z, y: deckY, radius: r, height: 0.022, color: p.buildingLight, topColor: shade(p.buildingMid, -0.15) });
   cylinderBand(ctx, cam, { x: lm.x, z: lm.z, radius: r, y0: deckY, y1: deckY + 0.008, color: glow, alpha: 0.9 });
   strokeRing(ctx, cam, lm.x, deckY + 0.023, lm.z, r * 0.72, glow, Math.max(1.2, cam.span * 0.004), 0.95);
   strokeRing(ctx, cam, lm.x, deckY + 0.023, lm.z, r * 0.3, accent, Math.max(1.2, cam.span * 0.004), 0.95);
@@ -439,24 +482,28 @@ export function vertiportBase(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLandmar
 
   // 停まっている垂直離着陸機
   const craft = toScreen(cam, lm.x + r * 0.1, deckY + 0.04, lm.z - r * 0.05);
-  const s = cam.span * r * 0.3;
-  fillEllipse(ctx, craft.x, craft.y + s * 0.3, s * 1.3, s * 0.4, p.shadow, 0.25);
+  const s = cam.span * r * 0.32;
+  fillEllipse(ctx, craft.x, craft.y + s * 0.32, s * 1.35, s * 0.42, p.shadow, 0.26);
   for (const [dx, dy] of [
-    [-1.1, -0.2],
-    [1.1, -0.2],
-    [-0.8, 0.35],
-    [0.8, 0.35],
+    [-1.15, -0.22],
+    [1.15, -0.22],
+    [-0.85, 0.38],
+    [0.85, 0.38],
   ] as const) {
-    fillEllipse(ctx, craft.x + dx * s, craft.y + dy * s - s * 0.2, s * 0.42, s * 0.14, mix(p.buildingGlass, '#ffffff', 0.4), 0.8);
+    fillEllipse(ctx, craft.x + dx * s, craft.y + dy * s - s * 0.22, s * 0.46, s * 0.15, mix(p.buildingGlass, '#ffffff', 0.38), 0.78);
+    fillCircle(ctx, craft.x + dx * s, craft.y + dy * s - s * 0.22, Math.max(0.8, s * 0.08), p.buildingLight);
   }
-  fillEllipse(ctx, craft.x, craft.y - s * 0.1, s * 0.75, s * 0.32, p.buildingLight);
-  fillEllipse(ctx, craft.x + s * 0.2, craft.y - s * 0.22, s * 0.32, s * 0.15, mix(p.buildingGlass, '#1d2a3a', 0.4));
+  fillEllipse(ctx, craft.x, craft.y - s * 0.08, s * 0.82, s * 0.3, p.buildingLight);
+  fillEllipse(ctx, craft.x - s * 0.08, craft.y - s * 0.16, s * 0.42, s * 0.14, mix(p.buildingLight, '#ffffff', 0.35));
+  fillEllipse(ctx, craft.x + s * 0.22, craft.y - s * 0.2, s * 0.3, s * 0.14, p.glassDeep);
+  fillEllipse(ctx, craft.x + s * 0.18, craft.y - s * 0.24, s * 0.12, s * 0.06, '#ffffff', 0.35);
+  fillCircle(ctx, craft.x - s * 0.55, craft.y - s * 0.04, Math.max(1, s * 0.08), glow);
 
   // 管制塔
   const tx = lm.x - r * 0.7;
   const tz = lm.z + r * 0.4;
   drawCylinder(ctx, cam, { x: tx, z: tz, y: 0, radius: r * 0.12, height: h * 0.9, color: p.buildingLight });
-  drawCylinder(ctx, cam, { x: tx, z: tz, y: h * 0.9, radius: r * 0.2, height: h * 0.12, color: mix(p.buildingGlass, '#1d2a3a', 0.3) });
+  drawCylinder(ctx, cam, { x: tx, z: tz, y: h * 0.9, radius: r * 0.2, height: h * 0.12, color: p.glassDeep });
   const beacon = toScreen(cam, tx, h * 1.04, tz);
   drawGlow(ctx, beacon.x, beacon.y, cam.span * 0.02, accent, 0.8);
 }
@@ -471,21 +518,21 @@ export function watchPylonBase(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLandma
   drawCylinder(ctx, cam, { x: lm.x, z: lm.z, y: 0, radius: r * 1.4, height: 0.012, color: shade(p.buildingMid, -0.1) });
   drawCylinder(ctx, cam, { x: lm.x, z: lm.z, y: 0.012, radius: r * 0.55, height: h * 0.84, color: shade(p.buildingMid, -0.08) });
   cylinderBand(ctx, cam, { x: lm.x, z: lm.z, radius: r * 0.56, y0: h * 0.2, y1: h * 0.8, color: '#ffffff', alpha: 0.12 });
-  // 頭部
-  drawCylinder(ctx, cam, { x: lm.x, z: lm.z, y: h * 0.84, radius: r * 1.2, height: h * 0.1, color: p.buildingLight, topColor: shade(p.buildingMid, -0.2) });
-  cylinderBand(ctx, cam, { x: lm.x, z: lm.z, radius: r * 1.2, y0: h * 0.87, y1: h * 0.91, color: '#ff4f5e', alpha: 0.95 });
+  // 頭部（監視灯は淡い機能色で、面積を取らない）
+  drawCylinder(ctx, cam, { x: lm.x, z: lm.z, y: h * 0.84, radius: r * 1.2, height: h * 0.1, color: p.buildingLight, topColor: shade(p.buildingMid, -0.15) });
+  cylinderBand(ctx, cam, { x: lm.x, z: lm.z, radius: r * 1.2, y0: h * 0.87, y1: h * 0.91, color: p.alert, alpha: 0.63 });
   const eye = toScreen(cam, lm.x, h * 0.89, lm.z);
-  drawGlow(ctx, eye.x, eye.y, cam.span * 0.04, '#ff4f5e', 0.45);
+  drawGlow(ctx, eye.x, eye.y, cam.span * 0.04, p.alert, 0.3);
 }
 
-export function watchPylonSpinner(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLandmark, angle: number): void {
+export function watchPylonSpinner(ctx: Ctx, cam: IsoCamera, lm: PlacedDioramaLandmark, p: DioramaPalette, angle: number): void {
   const head = toScreen(cam, lm.x, lm.height * 0.89, lm.z);
   const reach = 0.42;
   const spread = 0.22;
   const g0 = toScreen(cam, lm.x + Math.cos(angle - spread) * reach, 0.004, lm.z + Math.sin(angle - spread) * reach);
   const g1 = toScreen(cam, lm.x + Math.cos(angle + spread) * reach, 0.004, lm.z + Math.sin(angle + spread) * reach);
   const gm = toScreen(cam, lm.x + Math.cos(angle) * reach * 0.9, 0.004, lm.z + Math.sin(angle) * reach * 0.9);
-  fillPoly(ctx, [head, g0, g1], '#ff6b78', 0.1);
-  fillPoly(ctx, [toScreen(cam, lm.x, 0.004, lm.z), g0, g1], '#ff6b78', 0.1);
-  drawGlow(ctx, gm.x, gm.y, cam.span * 0.06, '#ff6b78', 0.35);
+  fillPoly(ctx, [head, g0, g1], p.alert, 0.07);
+  fillPoly(ctx, [toScreen(cam, lm.x, 0.004, lm.z), g0, g1], p.alert, 0.07);
+  drawGlow(ctx, gm.x, gm.y, cam.span * 0.06, p.alert, 0.24);
 }
