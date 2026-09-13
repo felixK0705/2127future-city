@@ -2,7 +2,7 @@
    2127 — neutral grey canvas, frosted panels, one city accent
    ============================================================ */
 :root {
-  --red: #d93f3f;
+  --red: #555860;
   --red-soft: color-mix(in srgb, var(--red) 12%, transparent);
   --ink: #1a1a1a;
   --ink-2: #5f6063;
@@ -17,7 +17,7 @@
   --panel-strong: rgb(255 255 255 / 74%);
   --panel-quiet: rgb(255 255 255 / 34%);
   --panel-line: rgb(255 255 255 / 62%);
-  --blur: blur(28px) saturate(150%);
+  --blur: blur(16px);
   --shadow: 0 18px 48px rgb(24 24 27 / 8%);
   --shadow-soft: 0 8px 26px rgb(24 24 27 / 5%);
 
@@ -29,7 +29,7 @@
   --dark-ink-2: #a1a1a6;
 
   /* per-city accent — App.tsx writes these once a city is chosen */
-  --accent: #d93f3f;
+  --accent: #555860;
   --accent-ink: #1a1a1a;
 
   --type-display: clamp(1.55rem, 3vw, 2.5rem);
@@ -152,7 +152,7 @@ button { touch-action: manipulation; }
 
 /* ============================================================
    Animated background (GSAP drives the transforms)
-   Soft red light on grey, plus a faint vertical rhythm.
+   Soft dark-grey light on grey, plus a faint vertical rhythm.
    ============================================================ */
 .bg {
   position: fixed;
@@ -177,7 +177,7 @@ button { touch-action: manipulation; }
   left: -8vmax;
   width: 62vmax;
   height: 62vmax;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 20%, transparent), transparent 58%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 42%, transparent), transparent 58%);
   animation: bg-orb-breathe 16s ease-in-out infinite;
 }
 .bg__orb--tertiary {
@@ -185,7 +185,7 @@ button { touch-action: manipulation; }
   bottom: -20vmax;
   width: 66vmax;
   height: 66vmax;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 56%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 34%, transparent), transparent 56%);
   animation: bg-orb-breathe 22s ease-in-out infinite reverse;
 }
 .bg__orb--city {
@@ -216,12 +216,12 @@ button { touch-action: manipulation; }
 @property --red {
   syntax: "<color>";
   inherits: true;
-  initial-value: #d93f3f;
+  initial-value: #555860;
 }
 @property --accent {
   syntax: "<color>";
   inherits: true;
-  initial-value: #d93f3f;
+  initial-value: #555860;
 }
 .app {
   position: relative;
@@ -230,6 +230,11 @@ button { touch-action: manipulation; }
 }
 .app.is-jump-cover {
   transition: none;
+}
+/* 政策は DOM に残して跳躍の開始を詰まらせない。見えてはいけない。 */
+.is-beneath-jump {
+  visibility: hidden;
+  pointer-events: none;
 }
 .screen {
   display: flex;
@@ -583,8 +588,8 @@ button { touch-action: manipulation; }
    3. Time jump — a single sphere
    ============================================================ */
 .time-jump {
-  --red: #d93f3f;
-  --accent: #d93f3f;
+  --red: #555860;
+  --accent: #555860;
   align-items: center;
   justify-content: center;
   position: absolute;
@@ -594,6 +599,7 @@ button { touch-action: manipulation; }
   max-width: none;
   padding: 0;
   pointer-events: none;
+  background: linear-gradient(168deg, var(--bg) 0%, var(--bg-2) 100%);
 }
 .time-jump__veil {
   position: absolute;
@@ -628,6 +634,14 @@ button { touch-action: manipulation; }
   font-variant-numeric: tabular-nums;
   transform-origin: center center;
   will-change: transform;
+  animation: time-jump-year 2s cubic-bezier(.16, 1, .3, 1) forwards;
+}
+@keyframes time-jump-year {
+  from { transform: scale(.42); }
+  to { transform: scale(1.28); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .time-jump strong { animation: none; transform: scale(1); }
 }
 
 /* ============================================================
@@ -751,23 +765,21 @@ button { touch-action: manipulation; }
 }
 .souvenir-side__toggle { display: flex; justify-content: flex-end; }
 .souvenir-field {
-  border-radius: var(--r-m);
-  padding: 14px 18px;
-}
-.souvenir-field label {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--ink-3);
-  font-size: var(--type-label);
-  letter-spacing: .08em;
+  width: 100%;
 }
 .souvenir-field input {
   width: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
+  min-height: 52px;
+  border: 1px solid rgb(26 26 26 / 10%);
+  border-radius: var(--r-full);
+  padding: 14px 22px;
+  background: #fff;
   font-size: 1.05rem;
   font-weight: 500;
+}
+.souvenir-field input::placeholder {
+  color: var(--ink-3);
+  letter-spacing: .06em;
 }
 .souvenir-field input:focus-visible { outline-offset: 4px; }
 .status {

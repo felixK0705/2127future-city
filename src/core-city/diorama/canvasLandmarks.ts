@@ -51,8 +51,8 @@ export function landmarkSpinSeconds(kind: DioramaLandmarkKind): number | null {
 }
 
 function accentColor(landmark: PlacedDioramaLandmark, palette: DioramaPalette): string {
-  if (landmark.accent === 'primary') return palette.accentPrimary;
-  if (landmark.accent === 'secondary') return palette.accentSecondary;
+  if (landmark.accent === 'primary') return mix(palette.accentPrimary, palette.buildingLight, 0.86);
+  if (landmark.accent === 'secondary') return mix(palette.accentSecondary, palette.buildingLight, 0.82);
   return palette.buildingMid;
 }
 

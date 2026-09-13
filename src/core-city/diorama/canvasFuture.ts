@@ -27,8 +27,8 @@ import type { DioramaPalette, PlacedDioramaLandmark } from './types';
  */
 
 function accentOf(lm: PlacedDioramaLandmark, p: DioramaPalette): string {
-  if (lm.accent === 'primary') return p.accentPrimary;
-  if (lm.accent === 'secondary') return p.accentSecondary;
+  if (lm.accent === 'primary') return mix(p.accentPrimary, p.buildingLight, 0.86);
+  if (lm.accent === 'secondary') return mix(p.accentSecondary, p.buildingLight, 0.82);
   return p.buildingMid;
 }
 

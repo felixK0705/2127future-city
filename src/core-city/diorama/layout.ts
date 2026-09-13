@@ -133,13 +133,12 @@ function pickMaterial(
 ): BlockMaterial {
   const roll = rng.next();
   // 彩度の高い色は小さな建物にだけ、ごく少量。面積で使わない。
-  if (height < 0.22 && roll > 0.95 && order < 0.6) {
+  if (height < 0.22 && roll > 0.97 && order < 0.5) {
     return rng.chance(0.6) ? 'accentSecondary' : 'accentPrimary';
   }
-  // 自由な街ほど、外壁の色がばらばらになる（パステルなので基調は崩れない）
-  const tint = pos(traits.governance) * 0.42 + patina * 0.12;
+  const tint = pos(traits.governance) * 0.18 + patina * 0.06;
   if (roll < tint) return rng.chance(0.5) ? 'tintPrimary' : 'tintSecondary';
-  const glass = tint + tuning.glassBias * 0.45 + (height > 0.4 ? 0.14 : 0.03) + pos(traits.growth) * 0.1;
+  const glass = tint + tuning.glassBias * 0.7 + (height > 0.4 ? 0.28 : 0.12) + pos(traits.growth) * 0.12;
   if (roll < glass) return 'glass';
   // 管理された街は白一色に揃う
   if (order > 0.6) return roll < 0.86 ? 'light' : 'mid';

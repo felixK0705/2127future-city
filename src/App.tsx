@@ -19,7 +19,7 @@ import { CATEGORY_KEYS, type CategoryKey, type Choices } from './types'
 type Phase = 'intro' | 'policies' | 'jump' | 'reveal' | 'why' | 'souvenir' | 'reflection'
 const DEFAULT_ARCHETYPE_ID = 'OFEC'
 const DEFAULT_CITY_NAME = '余白市'
-const BRAND_ACCENT = '#d93f3f'
+const BRAND_ACCENT = '#555860'
 
 function readSharedDesign() {
   const params = new URLSearchParams(window.location.search)
@@ -40,6 +40,7 @@ export default function App() {
   const shared = useMemo(readSharedDesign, [])
   const [phase, setPhase] = useState<Phase>(shared.complete ? 'souvenir' : 'intro')
   const [jumpCover, setJumpCover] = useState(false)
+  const [cityReady, setCityReady] = useState(false)
   const [step, setStep] = useState(0)
   const [choices, setChoices] = useState<Choices>(shared.choices)
   const [cityName, setCityName] = useState(shared.cityName)
@@ -61,6 +62,7 @@ export default function App() {
     setJumpCover(true)
   }, [])
   const dismissJump = useCallback(() => setJumpCover(false), [])
+  const markCityReady = useCallback(() => setCityReady(true), [])
 
   const choosePolicy = (category: CategoryKey, policy: string) => {
     setChoices((current) => ({ ...current, [category]: policy }))
@@ -72,8 +74,9 @@ export default function App() {
     setChoices(completedChoices)
     if (!submitted.current) {
       submitted.current = true
-      addCollectiveSubmission(completedChoices)
+      window.setTimeout(() => addCollectiveSubmission(completedChoices), 0)
     }
+    setCityReady(false)
     setPhase('jump')
   }
 
@@ -85,12 +88,13 @@ export default function App() {
     setNickname('')
     submitted.current = false
     setJumpCover(false)
+    setCityReady(false)
     setPhase('intro')
   }
 
-  // 都市色は揭示以降。TIME JUMP まではブランドの赤を残す。
+  // 都市色は幕が完全に開いてから。跳躍中に差し替えるとスタイル再計算で詰まる。
   const accent =
-    isCompleteChoices(choices) && phase !== 'jump'
+    isCompleteChoices(choices) && phase === 'reveal' && !jumpCover
       ? accentForArchetype(archetype.id).primary
       : BRAND_ACCENT
   const commonStyle = {
@@ -107,23 +111,32 @@ export default function App() {
       {phase === 'intro' && (
         <Intro nickname={nickname} setNickname={setNickname} onStart={() => setPhase('policies')} />
       )}
-      {phase === 'policies' && (
-        <PolicyFlow
-          choices={choices}
-          step={step}
-          onStepChange={setStep}
-          onChoose={choosePolicy}
-          onComplete={completePolicies}
-        />
+      {(phase === 'policies' || phase === 'jump') && (
+        <div
+          className={phase === 'jump' ? 'is-beneath-jump' : undefined}
+          inert={phase === 'jump' || undefined}
+          aria-hidden={phase === 'jump' || undefined}
+        >
+          <PolicyFlow
+            choices={choices}
+            step={step}
+            onStepChange={setStep}
+            onChoose={choosePolicy}
+            onComplete={completePolicies}
+          />
+        </div>
       )}
-      {(phase === 'jump' || jumpCover) && <TimeJump onArrive={goToReveal} onDismiss={dismissJump} />}
-      {phase === 'reveal' && (
+      {(phase === 'jump' || jumpCover) && (
+        <TimeJump onArrive={goToReveal} onDismiss={dismissJump} cityReady={cityReady} />
+      )}
+      {(phase === 'reveal' || jumpCover) && isCompleteChoices(choices) && (
         <CityReveal
           cityName={archetype.cityName}
           title={archetype.title}
           nickname={nickname}
           scores={scores}
           archetypeId={archetype.id}
+          onReady={markCityReady}
           onContinue={() => setPhase('why')}
         />
       )}

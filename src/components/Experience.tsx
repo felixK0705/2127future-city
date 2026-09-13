@@ -146,11 +146,13 @@ type DioramaController = {
   destroy?: () => void
 }
 
-export const DioramaStage = forwardRef<DioramaStageHandle, { scores: Scores; archetypeId: string }>(
-  function DioramaStage({ scores, archetypeId }, ref) {
+export const DioramaStage = forwardRef<DioramaStageHandle, { scores: Scores; archetypeId: string; onReady?: () => void }>(
+  function DioramaStage({ scores, archetypeId, onReady }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const stageRef = useRef<HTMLDivElement>(null)
     const controllerRef = useRef<DioramaController | null>(null)
+    const onReadyRef = useRef(onReady)
+    onReadyRef.current = onReady
     const [fallback, setFallback] = useState(false)
     // scores is a fresh object on every render, so rebuild on the values only
     const scoreKey = METRIC_KEYS.map((key) => scores[key]).join(',')
@@ -160,6 +162,7 @@ export const DioramaStage = forwardRef<DioramaStageHandle, { scores: Scores; arc
       const stage = stageRef.current
       if (reduced || !canvasRef.current || !stage) {
         setFallback(true)
+        onReadyRef.current?.()
         return
       }
       try {
@@ -171,10 +174,16 @@ export const DioramaStage = forwardRef<DioramaStageHandle, { scores: Scores; arc
           width: Math.max(320, stage.clientWidth),
           height: Math.max(240, stage.clientHeight),
         }) as DioramaController
+        onReadyRef.current?.()
         // observe the stage, not the canvas: the renderer writes inline px sizes
         // onto the canvas, so observing it would freeze the size at first paint.
+        let skipFirst = true
         const observer = new ResizeObserver(([entry]) => {
           if (!entry) return
+          if (skipFirst) {
+            skipFirst = false
+            return
+          }
           controllerRef.current?.resize?.(entry.contentRect.width, entry.contentRect.height)
         })
         observer.observe(stage)
@@ -184,6 +193,7 @@ export const DioramaStage = forwardRef<DioramaStageHandle, { scores: Scores; arc
         }
       } catch {
         setFallback(true)
+        onReadyRef.current?.()
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [archetypeId, scoreKey])
@@ -208,8 +218,16 @@ export const DioramaStage = forwardRef<DioramaStageHandle, { scores: Scores; arc
   },
 )
 
-export function CityVisualization({ scores, archetypeId }: { scores: Scores; archetypeId: string }) {
-  return <DioramaStage scores={scores} archetypeId={archetypeId} />
+export function CityVisualization({
+  scores,
+  archetypeId,
+  onReady,
+}: {
+  scores: Scores
+  archetypeId: string
+  onReady?: () => void
+}) {
+  return <DioramaStage scores={scores} archetypeId={archetypeId} onReady={onReady} />
 }
 
 /** the five indicators as a plain label/number list, weakest one in red */
@@ -378,81 +396,111 @@ export function PolicyFlow({
 export function TimeJump({
   onArrive,
   onDismiss,
+  cityReady = false,
 }: {
   onArrive: () => void
   onDismiss?: () => void
+  cityReady?: boolean
 }) {
-  const [year, setYear] = useState(2027)
-  const [progress, setProgress] = useState(0)
   const [covering, setCovering] = useState(false)
   const screenRef = useRef<HTMLDivElement>(null)
   const veilRef = useRef<HTMLDivElement>(null)
   const orbRef = useRef<HTMLDivElement>(null)
+  const yearRef = useRef<HTMLElement>(null)
+  const coveringRef = useRef(false)
 
   useEffect(() => {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let frame = 0
     let hold = 0
-    let leave: gsap.core.Timeline | undefined
+    let coverTween: gsap.core.Tween | undefined
+    let cancelled = false
+    let shownYear = 2027
 
-    const finish = () => {
-      if (reduced) {
-        onArrive()
-        onDismiss?.()
-        return
-      }
-      // 先用幕布蓋住，再在底下掛上揭示頁，最後整層溶解。
-      // 城市不能從光球旁邊「長出來」，也不要和背景縮放、資訊列滑入搶戲。
-      leave = gsap.timeline({ onComplete: () => onDismiss?.() })
-      leave.to(veilRef.current, { opacity: 1, duration: 0.28, ease: 'power2.inOut' })
-      leave.add(() => {
+    const writeYear = (year: number) => {
+      if (!yearRef.current || year === shownYear) return
+      shownYear = year
+      yearRef.current.textContent = String(year)
+    }
+
+    const cover = () => {
+      if (cancelled || coveringRef.current) return
+      writeYear(2127)
+      const reveal = () => {
+        coveringRef.current = true
         setCovering(true)
         onArrive()
+      }
+      if (reduced) {
+        reveal()
+        return
+      }
+      coverTween = gsap.to(veilRef.current, {
+        opacity: 1,
+        duration: 0.16,
+        ease: 'power2.inOut',
+        onComplete: reveal,
       })
-      leave.to({}, { duration: 0.14 })
-      leave.to(orbRef.current, { opacity: 0, duration: 0.48, ease: 'power2.out' }, '-=0.02')
-      leave.to(screenRef.current, { opacity: 0, duration: 0.42, ease: 'power2.out' }, '<')
     }
 
     if (reduced) {
-      setYear(2127)
-      setProgress(1)
-      hold = window.setTimeout(finish, 220)
-      return () => window.clearTimeout(hold)
+      writeYear(2127)
+      hold = window.setTimeout(cover, 160)
+      return () => {
+        cancelled = true
+        window.clearTimeout(hold)
+        coverTween?.kill()
+      }
     }
 
     const started = performance.now()
     const tick = (now: number) => {
+      if (cancelled) return
       const raw = Math.min(1, Math.max(0, (now - started) / 2000))
       const eased = 1 - (1 - raw) ** 3
-      setProgress(eased)
-      setYear(Math.round(2027 + 100 * eased))
+      writeYear(Math.round(2027 + 100 * eased))
       if (raw < 1) frame = requestAnimationFrame(tick)
-      else hold = window.setTimeout(finish, 160)
+      else hold = window.setTimeout(cover, 80)
     }
     frame = requestAnimationFrame(tick)
     return () => {
+      cancelled = true
       cancelAnimationFrame(frame)
       window.clearTimeout(hold)
-      leave?.kill()
+      coverTween?.kill()
     }
-  }, [onArrive, onDismiss])
+  }, [onArrive])
 
-  const yearScale = 0.42 + progress * 0.86
+  useEffect(() => {
+    if (!covering) return
+    if (!cityReady) {
+      const timeout = window.setTimeout(() => onDismiss?.(), 560)
+      return () => window.clearTimeout(timeout)
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      onDismiss?.()
+      return
+    }
+    const leave = gsap.timeline({ onComplete: () => onDismiss?.() })
+    leave.to(orbRef.current, { opacity: 0, duration: 0.32, ease: 'power2.out' })
+    leave.to(screenRef.current, { opacity: 0, duration: 0.28, ease: 'power2.out' }, '<')
+    return () => {
+      leave.kill()
+    }
+  }, [covering, cityReady, onDismiss])
 
   return (
     <div
       className="screen time-jump"
       id={covering ? undefined : 'main-content'}
       role={covering ? undefined : 'main'}
-      aria-live="polite"
       aria-hidden={covering || undefined}
       ref={screenRef}
     >
       <div className="time-jump__veil" ref={veilRef} />
       <div className="time-jump__orb" ref={orbRef}>
         <p className="eyebrow"><Icon name="flight_takeoff" />100年後へ</p>
-        <strong style={{ transform: `scale(${yearScale})` }}>{year}</strong>
+        <strong ref={yearRef}>2027</strong>
       </div>
     </div>
   )
@@ -465,6 +513,7 @@ export function CityReveal({
   scores,
   archetypeId,
   onContinue,
+  onReady,
 }: {
   cityName: string
   title: string
@@ -472,12 +521,13 @@ export function CityReveal({
   scores: Scores
   archetypeId: string
   onContinue: () => void
+  onReady?: () => void
 }) {
   const tradeoffs = getTradeoffs(scores)
   return (
     <main className="screen reveal-screen" id="main-content">
       <div className="reveal__stage">
-        <CityVisualization scores={scores} archetypeId={archetypeId} />
+        <CityVisualization scores={scores} archetypeId={archetypeId} onReady={onReady} />
       </div>
       <section className="reveal__bar panel">
         <div>
@@ -716,9 +766,18 @@ export function Souvenir({
               <button role="tab" aria-selected={back} onClick={() => setBack(true)}>裏面</button>
             </div>
           </div>
-          <div className="souvenir-field panel panel--quiet" data-enter>
-            <label htmlFor="city-name">都市の名前</label>
-            <input id="city-name" maxLength={24} value={cityName} onChange={(event) => setCityName(event.target.value.slice(0, 24))} />
+          <div className="souvenir-field" data-enter>
+            <label className="sr-only" htmlFor="city-name">{UI_COPY.souvenir.cityName}</label>
+            <input
+              id="city-name"
+              name="city-name"
+              type="text"
+              autoComplete="off"
+              maxLength={24}
+              placeholder={UI_COPY.souvenir.cityName}
+              value={cityName}
+              onChange={(event) => setCityName(event.target.value.slice(0, 24))}
+            />
           </div>
           <button className="button button--primary" disabled={!cityName.trim()} onClick={save} data-enter>
             <Icon name="download" />

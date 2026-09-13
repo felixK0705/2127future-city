@@ -16,14 +16,12 @@ export function useEnter<T extends HTMLElement>(key: unknown, delay = 0) {
     if (targets.length === 0) return
 
     const tween = gsap.from(targets, {
-      y: 16,
+      y: 14,
       opacity: 0,
-      duration: 0.45,
+      duration: 0.36,
       delay,
-      // amount spreads a fixed total over however many targets there are.
-      // A per-element delay would push the last one — always the button —
-      // more than half a second behind the heading on the busier screens.
-      stagger: { amount: 0.2 },
+      force3D: true,
+      stagger: { amount: 0.16 },
       ease: 'power3.out',
       clearProps: 'transform,opacity',
     })

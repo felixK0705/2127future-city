@@ -164,11 +164,50 @@ function toneOf(nx: number, nz: number): number {
 }
 
 function sideColor(base: string, tone: number): string {
-  return shade(base, lerp(-0.26, -0.04, tone));
+  return mix('#dce1e7', base, lerp(0.78, 1, tone));
 }
 
 function sub(a: Point2, b: Point2): Point2 {
   return { x: a.x - b.x, y: a.y - b.y };
+}
+
+function screenCross(a: Point2, b: Point2, c: Point2): number {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+/** 直方体の画面上の輪郭。欠けた側面から後ろが透けないように、先に不透明で埋める。 */
+function convexHull(points: readonly Point2[]): Point2[] {
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (sorted.length < 3) return sorted;
+  const lower: Point2[] = [];
+  for (const point of sorted) {
+    while (lower.length >= 2 && screenCross(lower[lower.length - 2]!, lower[lower.length - 1]!, point) <= 0) {
+      lower.pop();
+    }
+    lower.push(point);
+  }
+  const upper: Point2[] = [];
+  for (let i = sorted.length - 1; i >= 0; i -= 1) {
+    const point = sorted[i]!;
+    while (upper.length >= 2 && screenCross(upper[upper.length - 2]!, upper[upper.length - 1]!, point) <= 0) {
+      upper.pop();
+    }
+    upper.push(point);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
+/**
+ * 側面が見えているか。
+ * 2:1 ダイメトリックでは、法線の深さ成分が 0 付近でも横方向に面積が残る。
+ * 法線だけで切ると、回転の途中で壁が消えて建物が透ける。
+ */
+function wallIsVisible(wx: number, wz: number, a: Point2, b: Point2, c: Point2): boolean {
+  const area = screenCross(a, b, c);
+  if (Math.abs(area) > 0.8) return true;
+  return wx + wz > -0.28;
 }
 
 /**
@@ -210,7 +249,7 @@ export function drawBox(ctx: Ctx, camera: IsoCamera, spec: BoxSpec): BoxResult {
     // 法線を回してから、手前を向いているかを判定する
     const wx = nx * c - nz * s;
     const wz = nx * s + nz * c;
-    if (wx + wz <= 0.0001) continue;
+    if (!wallIsVisible(wx, wz, bottom[i]!, bottom[j]!, top[j]!)) continue;
 
     const tone = toneOf(wx, wz);
     const quad = [bottom[i]!, bottom[j]!, top[j]!, top[i]!];
@@ -238,6 +277,7 @@ export function drawBox(ctx: Ctx, camera: IsoCamera, spec: BoxSpec): BoxResult {
   }
 
   if (!spec.invisible) {
+    fillPoly(ctx, convexHull([...bottom, ...top]), spec.color);
     // 奥の面から描く
     drawList.sort((a, b) => a.depth - b.depth);
     for (const item of drawList) fillPoly(ctx, item.points, item.color);
@@ -492,7 +532,7 @@ export function drawGableRoof(
     const nz = spec.alongX ? nv : nu;
     const wx = nx * c - nz * s;
     const wz = nx * s + nz * c;
-    return { front: wx + wz > 0.0001, tone: toneOf(wx, wz) };
+    return { front: wx + wz > -0.28, tone: toneOf(wx, wz) };
   };
 
   const list: { points: Point2[]; color: string; depth: number }[] = [];
@@ -601,18 +641,18 @@ export function drawTree(
   const base = toScreen(camera, tree.x, 0, tree.z);
   const crown = tree.size * camera.span;
   const trunkHeight = crown * (tree.kind === 'cone' ? 1.05 : 1.48);
-  const leaf = tree.tone === 1 ? palette.foliageDeep : palette.foliage;
-  const leafLite = mix(leaf, '#ffffff', 0.28);
+  const leaf = mix(tree.tone === 1 ? palette.foliageDeep : palette.foliage, '#ffffff', 0.22);
+  const leafLite = mix(leaf, '#ffffff', 0.48);
   const top = base.y - trunkHeight;
   const rng = createRng(`tree:${tree.x.toFixed(3)}:${tree.z.toFixed(3)}`);
 
-  fillEllipse(ctx, base.x, base.y + crown * 0.02, crown * 0.22, crown * 0.08, palette.shadow, 0.16);
+  fillEllipse(ctx, base.x, base.y + crown * 0.02, crown * 0.18, crown * 0.06, palette.shadow, 0.1);
 
   ctx.save();
-  ctx.globalAlpha = 0.9 * opacityScale;
-  ctx.strokeStyle = mix(palette.bark, leaf, 0.22);
+  ctx.globalAlpha = 0.72 * opacityScale;
+  ctx.strokeStyle = mix(palette.bark, leaf, 0.35);
   ctx.lineCap = 'round';
-  ctx.lineWidth = Math.max(1, crown * 0.055);
+  ctx.lineWidth = Math.max(0.8, crown * 0.038);
   ctx.beginPath();
   ctx.moveTo(base.x, base.y);
   ctx.lineTo(base.x - crown * 0.02, top + crown * 0.08);
@@ -653,9 +693,9 @@ export function drawTree(
       const t = i / (tiers - 1);
       const w = crown * (0.92 - t * 0.62);
       const y = top - crown * (0.08 + t * 0.95);
-      fillEllipse(ctx, base.x + crown * 0.04, y + crown * 0.04, w * 0.92, w * 0.38, shade(leaf, -0.12), 0.42);
-      fillEllipse(ctx, base.x, y, w, w * 0.36, leaf, 0.62);
-      if (detailed) fillEllipse(ctx, base.x - w * 0.22, y - w * 0.12, w * 0.42, w * 0.16, leafLite, 0.4);
+      fillEllipse(ctx, base.x + crown * 0.04, y + crown * 0.04, w * 0.92, w * 0.38, shade(leaf, -0.08), 0.22);
+      fillEllipse(ctx, base.x, y, w, w * 0.36, leaf, 0.38);
+      if (detailed) fillEllipse(ctx, base.x - w * 0.22, y - w * 0.12, w * 0.42, w * 0.16, leafLite, 0.28);
     }
     return;
   }
@@ -679,13 +719,13 @@ export function drawTree(
     const dx = cluster[0];
     const dy = cluster[1];
     const scale = cluster[2];
-    fillEllipse(ctx, base.x + dx * crown + crown * 0.05, top + dy * crown + crown * 0.06, crown * scale * 0.95, crown * scale * 0.62, shade(leaf, -0.1), 0.32);
+    fillEllipse(ctx, base.x + dx * crown + crown * 0.05, top + dy * crown + crown * 0.06, crown * scale * 0.95, crown * scale * 0.62, shade(leaf, -0.08), 0.16);
   }
   for (const cluster of clusters) {
     const dx = cluster[0];
     const dy = cluster[1];
     const scale = cluster[2];
-    fillEllipse(ctx, base.x + dx * crown, top + dy * crown, crown * scale, crown * scale * 0.66, leaf, 0.58);
+    fillEllipse(ctx, base.x + dx * crown, top + dy * crown, crown * scale, crown * scale * 0.66, leaf, 0.36);
   }
   if (detailed) {
     for (let i = 0; i < Math.min(3, clusters.length); i += 1) {
@@ -700,7 +740,7 @@ export function drawTree(
         crown * scale * 0.38,
         crown * scale * 0.22,
         leafLite,
-        0.45,
+        0.28,
       );
     }
     const dots = 10;
@@ -1226,7 +1266,7 @@ export function drawLawn(
   lawn: { id: string; x: number; z: number; width: number; depth: number },
   palette: DioramaPalette,
 ): void {
-  const pad = mix(palette.platformTop, palette.foliage, 0.08);
+  const pad = mix(palette.platformTop, palette.foliage, 0.04);
   drawSurface(ctx, camera, {
     x: lawn.x,
     z: lawn.z,

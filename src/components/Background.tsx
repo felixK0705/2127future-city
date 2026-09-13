@@ -16,16 +16,24 @@ export function Background({ phase }: { phase: string }) {
     const context = gsap.context(() => {
       const orbs = [...root.querySelectorAll<HTMLElement>('.bg__orb')]
       const drift = orbs.map((orb, index) =>
-        gsap.to(orb, {
-          xPercent: index % 2 === 0 ? 38 : -42,
-          yPercent: index % 2 === 0 ? -28 : 32,
-          rotation: index % 2 === 0 ? 18 : -16,
-          scale: 1.28 - index * 0.08,
-          duration: 26 + index * 8,
-          repeat: -1,
-          yoyo: true,
-          ease: 'sine.inOut',
-        }),
+        gsap.fromTo(
+          orb,
+          {
+            xPercent: index % 2 === 0 ? -22 : 28,
+            yPercent: index % 2 === 0 ? 18 : -24,
+            scale: 0.9,
+          },
+          {
+            xPercent: index % 2 === 0 ? 48 : -52,
+            yPercent: index % 2 === 0 ? -36 : 40,
+            scale: 1.14,
+            duration: 10 + index * 2.4,
+            repeat: -1,
+            yoyo: true,
+            ease: 'sine.inOut',
+            force3D: true,
+          },
+        ),
       )
 
       // one full tile per cycle, so the loop restarts without a visible seam
@@ -50,19 +58,12 @@ export function Background({ phase }: { phase: string }) {
     }
   }, [])
 
-  // 100年を渡るあいだだけ、奥の景色も加速させる
+  // 幕の裏では球を止める。見えない加速は本編の描画と争うだけ。
   useEffect(() => {
-    const warping = phase === 'jump'
+    const hidden = phase === 'jump'
     driftRef.current.forEach((animation) => {
-      gsap.to(animation, { timeScale: warping ? 8 : 1, duration: 0.9, ease: 'power2.inOut' })
+      gsap.to(animation, { timeScale: hidden ? 0 : 1, duration: hidden ? 0.2 : 0.6, ease: 'power2.out' })
     })
-    if (rootRef.current) {
-      gsap.to(rootRef.current, {
-        opacity: warping ? 1 : 0.9,
-        duration: 1.1,
-        ease: 'power2.inOut',
-      })
-    }
   }, [phase])
 
   return (
