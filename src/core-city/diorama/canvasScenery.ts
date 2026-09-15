@@ -341,14 +341,13 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
     height: number,
     camera: IsoCamera,
     islet: Islet,
-    elapsed: number,
   ): void {
     const r = islet.size * Math.min(width, height);
     const period = width * 1.6;
     const raw = islet.u * period + camera.rot * width * islet.parallax;
     const x = (((raw % period) + period) % period) - (period - width) / 2;
     if (x < -r * 2 || x > width + r * 2) return;
-    const y = islet.v * height + Math.sin(elapsed * 0.4 + islet.phase) * r * 0.22;
+    const y = islet.v * height;
 
     // 遠いものほど空気に溶ける
     const haze = 0.5 - ((islet.parallax - 0.14) / 0.14) * 0.28;
@@ -406,14 +405,8 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
     }
   }
 
-  function paintBalloon(ctx: Ctx, camera: IsoCamera, balloon: Balloon, elapsed: number): void {
-    const drift = elapsed * 0.02;
-    const { point } = worldPoint(
-      camera,
-      balloon.angle + drift,
-      balloon.radius,
-      balloon.y + Math.sin(elapsed * 0.3 + balloon.phase) * 0.04,
-    );
+  function paintBalloon(ctx: Ctx, camera: IsoCamera, balloon: Balloon): void {
+    const { point } = worldPoint(camera, balloon.angle, balloon.radius, balloon.y);
     const r = balloon.size * camera.span;
 
     // 飛行船（気嚢・構造リング・客室窓・推進ポッド・航法灯）
@@ -484,28 +477,24 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
     width: number,
     height: number,
     camera: IsoCamera,
-    elapsed: number,
+    _elapsed: number,
   ): void {
-    // 光の粒（ゆっくり昇る）
     for (const mote of motes) {
-      const y = ((mote.y - elapsed * mote.speed) % 1 + 1) % 1;
-      const x = mote.x + Math.sin(elapsed * 0.3 + mote.phase) * 0.01;
       fillCircle(
         ctx,
-        x * width,
-        y * height,
+        mote.x * width,
+        mote.y * height,
         mote.r,
         mote.warm ? mix(tone.sun, palette.accentSecondary, 0.3) : '#ffffff',
-        0.16 + 0.12 * Math.sin(elapsed * 1.2 + mote.phase),
+        0.22,
       );
     }
 
-    // 小型の飛行体（鳥の群れの代わり）。細い線を 2 本だけ、ほとんど見えない濃さで流す
     ctx.strokeStyle = rgba(shade(tone.mountain, -0.3), 0.3);
     ctx.lineCap = 'round';
     for (const flock of flocks) {
       const travel = width + 260;
-      const base = ((flock.offset * travel + elapsed * flock.speed) % travel) - 130;
+      const base = ((flock.offset * travel) % travel) - 130;
       for (const bird of flock.birds.slice(0, 2)) {
         const x = base + bird.dx;
         const y = flock.y * height + bird.dy;
@@ -517,10 +506,10 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
       }
     }
 
-    for (const islet of islets) paintIslet(ctx, width, height, camera, islet, elapsed);
+    for (const islet of islets) paintIslet(ctx, width, height, camera, islet);
     for (const balloon of balloons) {
-      const { depth } = worldPoint(camera, balloon.angle + elapsed * 0.02, balloon.radius, balloon.y);
-      if (depth < 0) paintBalloon(ctx, camera, balloon, elapsed);
+      const { depth } = worldPoint(camera, balloon.angle, balloon.radius, balloon.y);
+      if (depth < 0) paintBalloon(ctx, camera, balloon);
     }
   }
 
@@ -529,17 +518,17 @@ export function createScenery(config: DioramaConfig, layout: DioramaLayout): Sce
     width: number,
     height: number,
     camera: IsoCamera,
-    elapsed: number,
+    _elapsed: number,
   ): void {
     for (const balloon of balloons) {
-      const { depth } = worldPoint(camera, balloon.angle + elapsed * 0.02, balloon.radius, balloon.y);
-      if (depth >= 0) paintBalloon(ctx, camera, balloon, elapsed);
+      const { depth } = worldPoint(camera, balloon.angle, balloon.radius, balloon.y);
+      if (depth >= 0) paintBalloon(ctx, camera, balloon);
     }
 
     // 雲海（画面の下端。浮島の底がここへ沈んでいくように見せる）
     const shadow = mix(tone.haze, tone.mountain, 0.18);
     for (const puff of cloudSea) {
-      const u = (((puff.u + elapsed * puff.speed) % 1.2) + 1.2) % 1.2 - 0.1;
+      const u = (((puff.u % 1.2) + 1.2) % 1.2) - 0.1;
       const size = puff.size * Math.max(width, height);
       drawCloud(
         ctx,
