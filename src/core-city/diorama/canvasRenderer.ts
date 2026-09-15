@@ -52,7 +52,8 @@ import type {
  *
  * 操作中も**描く内容は一切省かない**。以前は操作中だけ窓・樹影・路面標示を省いた簡略版に
  * 切り替えていたため、触った瞬間に街が別物に変わって見えた。
- * いまは内容を保ったまま焼く解像度だけを落とし、手が止まったら高解像度で焼き直す。
+ * 拡大縮小も静止部分を焼き直す。前回の絵を伸ばすと、壁が透明画素と混ざって
+ * 建物が透けて見える。焼く解像度は落とさない。完成した 1 枚だけを画面へ載せる。
  */
 
 export interface CanvasDioramaHandle {
@@ -177,7 +178,7 @@ export function createCanvasDiorama(options: {
   const { canvas, config } = options;
   const palette = config.palette;
 
-  const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
+  const context = canvas.getContext('2d', { alpha: false });
   if (!context) {
     throw new CanvasUnavailableError('この端末では Canvas2D コンテキストを取得できません');
   }
@@ -267,11 +268,47 @@ export function createCanvasDiorama(options: {
     const ictx = canvas.getContext('2d');
     if (ictx) {
       ictx.setTransform(dpr, 0, 0, dpr, -sx * dpr, -sy * dpr);
-      paintItem(ictx, occluder.item);
+      if (occluder.item.kind === 'tree') paintTreeMask(ictx, occluder.item.value);
+      else paintItem(ictx, occluder.item);
+      if (occluder.item.kind === 'landmark') solidifyMask(ictx);
     }
     const mask = { canvas, sx, sy };
     occluderMasks.set(occluder, mask);
     return mask;
+  }
+
+  /** 葉は半透明なので、そのまま destination-out すると人が木を突き抜ける。不透明な輪郭で消す。 */
+  function paintTreeMask(
+    target: Ctx,
+    tree: (typeof layout.trees)[number],
+  ): void {
+    const base = toScreen(camera, tree.x, 0, tree.z);
+    const crown = tree.size * camera.span;
+    const trunkHeight = crown * (tree.kind === 'cone' ? 1.05 : 1.48);
+    const top = base.y - trunkHeight;
+    target.save();
+    target.globalAlpha = 1;
+    target.globalCompositeOperation = 'source-over';
+    target.fillStyle = '#000000';
+    const trunkW = Math.max(2.2, crown * 0.12);
+    target.fillRect(base.x - trunkW / 2, top + crown * 0.02, trunkW, trunkHeight + crown * 0.04);
+    target.beginPath();
+    if (tree.kind === 'cone') target.ellipse(base.x, top - crown * 0.28, crown * 0.86, crown * 0.96, 0, 0, Math.PI * 2);
+    else target.ellipse(base.x, top - crown * 0.1, crown * 1.02, crown * 0.88, 0, 0, Math.PI * 2);
+    target.fill();
+    target.restore();
+  }
+
+  function solidifyMask(ctx: CanvasRenderingContext2D): void {
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    if (w < 1 || h < 1) return;
+    const img = ctx.getImageData(0, 0, w, h);
+    const data = img.data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i]! > 16) data[i] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
   }
 
   function paintItem(target: Ctx, item: Item): void {
@@ -378,12 +415,33 @@ export function createCanvasDiorama(options: {
     gz: number,
   ): boolean {
     const item = candidate.item;
-    if (!at || item.kind !== 'block') return candidate.depth > depth;
+    // items の depth は「一番奥の角」（描画順用）。隠れ判定に使うと、
+    // 木や建物の中心より手前にいる人でも「建物の方が奥」と誤判定して突き抜ける。
+    const frontDepth = depthOf(camera, item.value.x, item.value.z);
+    if (!at) return frontDepth > depth;
+    if (item.kind === 'tree') {
+      const dx = at.x - item.value.x;
+      const dz = at.z - item.value.z;
+      const reach = item.value.size * 1.25;
+      if (dx * dx + dz * dz < reach * reach) return true;
+      return frontDepth > depth;
+    }
+    if (item.kind === 'landmark') {
+      const hx = item.value.footprint * 0.5;
+      const hz = hx;
+      const ox = at.x - item.value.x;
+      const oz = at.z - item.value.z;
+      if (Math.abs(ox) < hx && Math.abs(oz) < hz) return true;
+      const pointInFront =
+        (ox >= hx && gx > 0) || (ox <= -hx && gx < 0) || (oz >= hz && gz > 0) || (oz <= -hz && gz < 0);
+      return !pointInFront;
+    }
+    if (item.kind !== 'block') return frontDepth > depth;
     const ox = at.x - item.value.x;
     const oz = at.z - item.value.z;
     const hx = item.value.width / 2;
     const hz = item.value.depth / 2;
-    if (Math.abs(ox) < hx && Math.abs(oz) < hz) return candidate.depth > depth;
+    if (Math.abs(ox) < hx && Math.abs(oz) < hz) return true;
     // 点がカメラ側の面より外にあれば、建物のどこにも隠されない
     const pointInFront =
       (ox >= hx && gx > 0) || (ox <= -hx && gx < 0) || (oz >= hz && gz > 0) || (oz <= -hz && gz < 0);
@@ -398,11 +456,15 @@ export function createCanvasDiorama(options: {
   const frontCanvas = document.createElement('canvas');
   const baseCanvas = document.createElement('canvas');
   const topCanvas = document.createElement('canvas');
+  const frameCanvas = document.createElement('canvas');
   const behindCtx = behindCanvas.getContext('2d');
   const frontCtx = frontCanvas.getContext('2d');
   const baseCtx = baseCanvas.getContext('2d');
   const topCtx = topCanvas.getContext('2d');
-  let liveSlot = -1;
+  const frameCtx = frameCanvas.getContext('2d');
+  /** 画面へ出す前に完成させる作業用。view は各フレームここを指す */
+  let view: Ctx = ctx;
+  let liveDirty = true;
   /** このフレームの浮島の上下動（px）。焼いた街と同じだけずらして描く */
   let frameBob = 0;
 
@@ -424,15 +486,9 @@ export function createCanvasDiorama(options: {
     skip: ((item: Item) => boolean) | undefined,
     draw: (target: Ctx) => void,
   ): void {
-    // 回転中は建物を焼き直している最中なので、隠れ判定までやると描画が落ちる
-    if (interacting) {
-      draw(ctx);
-      return;
-    }
-
     const mctx = moverCtx;
     if (!mctx) {
-      draw(ctx);
+      draw(view);
       return;
     }
 
@@ -462,7 +518,7 @@ export function createCanvasDiorama(options: {
         hides(candidate, depth, at, gx, gz),
     );
     if (front.length === 0) {
-      draw(ctx);
+      draw(view);
       return;
     }
 
@@ -487,11 +543,11 @@ export function createCanvasDiorama(options: {
     mctx.restore();
     mctx.globalCompositeOperation = 'source-over';
 
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalAlpha = 1;
-    ctx.drawImage(moverCanvas, px0, py0, px1 - px0, py1 - py0, px0, py0, px1 - px0, py1 - py0);
-    ctx.restore();
+    view.save();
+    view.setTransform(1, 0, 0, 1, 0, 0);
+    view.globalAlpha = 1;
+    view.drawImage(moverCanvas, px0, py0, px1 - px0, py1 - py0, px0, py0, px1 - px0, py1 - py0);
+    view.restore();
   }
 
   /* ---------------- 静止部分 ---------------- */
@@ -796,8 +852,7 @@ export function createCanvasDiorama(options: {
   const cloudDrift = layout.clouds.map(() => cloudRng.range(0, Math.PI * 2));
   const cloudShadow = mix(palette.cloud, config.background, 0.4);
 
-  /** 操作中は低い解像度で焼く（内容は同じ）。 */
-  const bakeScale = (): number => (interacting ? Math.min(1, dpr) : dpr);
+  const bakeScale = (): number => dpr;
 
   function ensureLayers(): void {
     if (backdropDirty || bakedRotation !== camera.rot) {
@@ -834,7 +889,7 @@ export function createCanvasDiorama(options: {
       const isFront = depthOf(camera, cloud.x, cloud.z) >= 0;
       if (isFront !== front) return;
       // 奥と手前で置き場所を変えない（切り替わる瞬間に雲が跳ばないように）
-      const sway = Math.sin(elapsed * cloud.speed + cloudDrift[index]!) * camera.span * 0.04;
+      const sway = Math.sin(cloudDrift[index]!) * camera.span * 0.04;
       const point = toScreen(camera, cloud.x * 1.2, cloud.y, cloud.z * 1.2);
       // 寄って見ているときは、手前の雲が通りを覆わないよう薄くする
       const alpha = front ? 0.9 * clamp((2 - zoom) / 0.9, 0.18, 1) : 0.9;
@@ -868,13 +923,13 @@ export function createCanvasDiorama(options: {
     behindCtx.setTransform(1, 0, 0, 1, 0, 0);
     behindCtx.clearRect(0, 0, behindCanvas.width, behindCanvas.height);
     behindCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    scenery.paintBehind(behindCtx, width, height, camera, elapsed);
+    scenery.paintBehind(behindCtx, width, height, camera, 0);
     drawClouds(behindCtx, false, bob);
     frontCtx.setTransform(1, 0, 0, 1, 0, 0);
     frontCtx.clearRect(0, 0, frontCanvas.width, frontCanvas.height);
     frontCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawClouds(frontCtx, true, bob);
-    scenery.paintFront(frontCtx, width, height, camera, elapsed);
+    scenery.paintFront(frontCtx, width, height, camera, 0);
     composeBase();
     composeTop();
   }
@@ -893,29 +948,37 @@ export function createCanvasDiorama(options: {
   function renderFrame(): void {
     const rebuilt = staticDirty || backdropDirty;
     ensureLayers();
-    ctx.imageSmoothingEnabled = false;
 
     const bob = 0;
     frameBob = 0;
-    const slot = Math.floor(elapsed / 5);
-    if (rebuilt || slot !== liveSlot || baseCanvas.width < 2) {
-      liveSlot = slot;
+    if (rebuilt || liveDirty || baseCanvas.width < 2) {
       refreshLiveLayers(bob);
+      liveDirty = false;
     }
 
+    const scene = frameCtx ?? ctx;
+    view = scene;
+    if (scene !== ctx) {
+      fitLayer(frameCanvas, width * dpr, height * dpr);
+      scene.setTransform(1, 0, 0, 1, 0, 0);
+      scene.globalAlpha = 1;
+      scene.globalCompositeOperation = 'source-over';
+    }
+    scene.imageSmoothingEnabled = false;
+
     // --- 空・遠景・焼いた街を一枚にまとめた土台 ---
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (baseCanvas.width > 0) ctx.drawImage(baseCanvas, 0, 0, width * dpr, height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, bob * dpr);
-    ctx.imageSmoothingEnabled = true;
+    scene.setTransform(1, 0, 0, 1, 0, 0);
+    if (baseCanvas.width > 0) scene.drawImage(baseCanvas, 0, 0, width * dpr, height * dpr);
+    scene.setTransform(dpr, 0, 0, dpr, 0, bob * dpr);
+    scene.imageSmoothingEnabled = true;
 
     // 水面のきらめき
-    if (!interacting) {
+    {
       for (const surface of layout.surfaces) {
         if (surface.kind !== 'water' && !surface.bridge) continue;
         for (let k = 0; k < 2; k += 1) {
           const t = Math.sin(elapsed * 0.8 + surface.x * 7 + surface.z * 5 + k * 2.1);
-          drawSurface(ctx, camera, {
+          drawSurface(scene, camera, {
             x: surface.x + t * surface.width * 0.18,
             z: surface.z + (k - 0.5) * surface.depth * 0.4,
             width: surface.width * 0.3,
@@ -1029,10 +1092,11 @@ export function createCanvasDiorama(options: {
       if (mover.kind === 'walker') {
         const { x, z, walk, alongX, direction, size, fade } = mover;
         if (fade <= 0) continue;
-        // 歩道の小人は建物の陰に入っても数 px。隠れ判定より歩きのコマを優先する
-        withOpacity(fade, () =>
-          drawFigure(ctx, camera, x, z, palette, { walk, alongX, direction, size }),
-        );
+        drawOccluded(mover.depth, screenBox(x, z, 0.04, 0.1), mover, undefined, (target) => {
+          withOpacity(fade, () =>
+            drawFigure(target, camera, x, z, palette, { walk, alongX, direction, size }),
+          );
+        });
         continue;
       }
       if (mover.kind === 'train') {
@@ -1076,22 +1140,27 @@ export function createCanvasDiorama(options: {
     }
 
     // 空を行き来する小型機（どの建物よりも高いところを飛ぶので、前後の描き直しは要らない）
-    for (const drone of layout.drones) drawDrone(ctx, camera, drone, elapsed, palette);
+    for (const drone of layout.drones) drawDrone(scene, camera, drone, elapsed, palette);
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    scene.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // --- 手前の雲・近景・きらめき・仕上げの光 ---
-    if (!interacting) {
-      for (const sparkle of layout.sparkles) {
-        const twinkle = 0.2 + 0.6 * (0.5 + 0.5 * Math.sin(elapsed * 2 + sparkle.phase * 6.28));
-        const point = toScreen(camera, sparkle.x, sparkle.y, sparkle.z);
-        drawSparkle(ctx, { x: point.x, y: point.y + bob }, sparkle.size * camera.span * 1.4, palette.cloud, twinkle);
-      }
+    for (const sparkle of layout.sparkles) {
+      const twinkle = 0.2 + 0.6 * (0.5 + 0.5 * Math.sin(elapsed * 2 + sparkle.phase * 6.28));
+      const point = toScreen(camera, sparkle.x, sparkle.y, sparkle.z);
+      drawSparkle(scene, { x: point.x, y: point.y + bob }, sparkle.size * camera.span * 1.4, palette.cloud, twinkle);
     }
 
-    ctx.imageSmoothingEnabled = false;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (topCanvas.width > 0) ctx.drawImage(topCanvas, 0, 0, width * dpr, height * dpr);
+    scene.imageSmoothingEnabled = false;
+    scene.setTransform(1, 0, 0, 1, 0, 0);
+    if (topCanvas.width > 0) scene.drawImage(topCanvas, 0, 0, width * dpr, height * dpr);
+
+    if (scene !== ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(frameCanvas, 0, 0);
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
@@ -1108,21 +1177,18 @@ export function createCanvasDiorama(options: {
     renderFrame();
   };
 
-  /** 視点が変わったら焼き直す。操作中は低解像度、落ち着いたら高解像度。 */
-  function invalidate(nowInteracting: boolean): void {
+  /** 視点が変わったら焼き直す。拡大では空を焼き直さない（視差は向きだけ）。 */
+  function invalidate(nowInteracting: boolean, kind: 'zoom' | 'rotate' | 'all' = 'all'): void {
     camera = cameraNow();
     interacting = nowInteracting;
-    staticDirty = true;
-    backdropDirty = true;
-    liveSlot = -1;
     window.clearTimeout(refineTimer);
+    staticDirty = true;
+    liveDirty = true;
+    if (kind !== 'zoom') backdropDirty = true;
     if (nowInteracting) {
       refineTimer = window.setTimeout(() => {
         interacting = false;
-        staticDirty = true;
-        backdropDirty = true;
-        if (paused) renderFrame();
-      }, 220);
+      }, 160);
     }
   }
 
@@ -1155,7 +1221,7 @@ export function createCanvasDiorama(options: {
       const distance = Math.hypot(a!.x - b!.x, a!.y - b!.y);
       if (pinchDistance > 0) {
         zoom = clamp(zoom * (distance / pinchDistance), MIN_ZOOM, MAX_ZOOM);
-        invalidate(true);
+        invalidate(true, 'zoom');
       }
       pinchDistance = distance;
       return;
@@ -1167,7 +1233,7 @@ export function createCanvasDiorama(options: {
     if (Math.abs(dx) < 1) return;
     lastX = event.clientX;
     rotation += dx * 0.0075;
-    invalidate(true);
+    invalidate(true, 'rotate');
   };
 
   const endPointer = (event: PointerEvent): void => {
@@ -1182,7 +1248,7 @@ export function createCanvasDiorama(options: {
   const onWheel = (event: WheelEvent): void => {
     event.preventDefault();
     zoom = clamp(zoom * Math.exp(-event.deltaY * 0.0012), MIN_ZOOM, MAX_ZOOM);
-    invalidate(true);
+    invalidate(true, 'zoom');
   };
 
   canvas.style.touchAction = 'none';
@@ -1278,7 +1344,7 @@ export function createCanvasDiorama(options: {
       canvas.removeEventListener('pointercancel', endPointer);
       canvas.removeEventListener('pointerleave', endPointer);
       canvas.removeEventListener('wheel', onWheel);
-      for (const layer of [staticCanvas, backdropCanvas, overlayCanvas, moverCanvas, behindCanvas, frontCanvas, baseCanvas, topCanvas]) {
+      for (const layer of [staticCanvas, backdropCanvas, overlayCanvas, moverCanvas, behindCanvas, frontCanvas, baseCanvas, topCanvas, frameCanvas]) {
         layer.width = 0;
         layer.height = 0;
       }

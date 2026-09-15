@@ -181,7 +181,7 @@ export function dronePosition(drone: DioramaDrone, t: number): { x: number; y: n
   const a = drone.phase + drone.speed * t;
   return {
     x: Math.cos(a) * drone.radius,
-    y: drone.y + Math.sin(t * 1.3 + drone.phase) * 0.02,
+    y: drone.y,
     z: Math.sin(a) * drone.radius,
   };
 }
