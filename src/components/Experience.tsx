@@ -721,8 +721,7 @@ export function Souvenir({
   return (
     <main className="screen souvenir-screen" id="main-content" ref={ref}>
       <header className="section-heading">
-        <p className="eyebrow" data-enter><Icon name="badge" />未来のおみやげ</p>
-        <h1 data-enter>都市設計カードを持ち帰りましょう。</h1>
+        <p className="eyebrow" data-enter><Icon name="badge" />未来市民証</p>
       </header>
       <div className="souvenir-layout">
         <article className="city-card panel" aria-label={back ? '都市設計カードの裏面' : '都市設計カードの表面'} data-enter>

@@ -751,7 +751,10 @@ button { touch-action: manipulation; }
 /* ============================================================
    6. Souvenir
    ============================================================ */
+/* the whole pass — eyebrow, card, controls, action — has to read in one screen */
 .souvenir-screen { justify-content: center; }
+.souvenir-screen .section-heading { padding: 0 0 clamp(8px, 1.4vh, 16px); }
+.souvenir-screen .center-action { padding-top: clamp(14px, 2.6vh, 32px); }
 .souvenir-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
@@ -986,6 +989,15 @@ button { touch-action: manipulation; }
   }
   .reveal__bar .button { grid-column: 1; }
   .city-card { height: clamp(400px, 56svh, 520px); }
+}
+
+/* on short screens the side column, not the card, is what pushes the action
+   below the fold — tighten it instead of shrinking the pass */
+@media (max-height: 680px) {
+  .souvenir-side { gap: 7px; }
+  .souvenir-field input { min-height: 46px; }
+  .souvenir-side__policies { padding: 13px; margin-top: 2px; }
+  .souvenir-side__policies p { padding: 3px 0; }
 }
 
 @media (max-width: 620px) {
