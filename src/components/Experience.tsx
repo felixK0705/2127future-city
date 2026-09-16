@@ -657,7 +657,7 @@ export function Souvenir({
   archetypeId,
   choices,
   scores,
-  onContinue,
+  onRestart,
 }: {
   cityName: string
   setCityName: (name: string) => void
@@ -666,7 +666,7 @@ export function Souvenir({
   archetypeId: string
   choices: Choices
   scores: Scores
-  onContinue: () => void
+  onRestart: () => void
 }) {
   const [back, setBack] = useState(false)
   const [message, setMessage] = useState('')
@@ -797,9 +797,8 @@ export function Souvenir({
         </section>
       </div>
       <div className="center-action">
-        <button className="button button--primary button--large" onClick={onContinue} data-enter>
-          <span>最後の問いへ進む</span>
-          <Icon name="arrow_forward" />
+        <button className="button button--primary button--large" onClick={onRestart} data-enter>
+          <span>最初の画面にもどる</span>
         </button>
       </div>
     </main>

@@ -157,7 +157,7 @@ export default function App() {
           archetypeId={archetype.id}
           choices={choices}
           scores={scores}
-          onContinue={() => setPhase('reflection')}
+          onRestart={restart}
         />
       )}
       {phase === 'reflection' && <Reflection onRestart={restart} />}
